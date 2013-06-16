@@ -1,9 +1,25 @@
 import ast
+import sys
 from functools import partial
 
+from pandas.core.base import StringMixin
 from pandas.computation.ops import BinOp, UnaryOp, _reductions, _mathops
 from pandas.computation.ops import _cmp_ops_syms, _bool_ops_syms
 from pandas.computation.ops import _arith_ops_syms, _unary_ops_syms
+from pandas.computation.ops import Term, Constant
+
+
+class Scope(object):
+    __slots__ = 'globals', 'locals'
+
+    def __init__(self, gbls=None, lcls=None, frame_level=1):
+        frame = sys._getframe(frame_level)
+
+        try:
+            self.globals = gbls or frame.f_globals.copy()
+            self.locals = lcls or frame.f_locals.copy()
+        finally:
+            del frame
 
 
 class ExprParserError(Exception):
@@ -15,14 +31,14 @@ class ExprVisitor(ast.NodeVisitor):
     """
     bin_ops = _cmp_ops_syms + _bool_ops_syms + _arith_ops_syms
     bin_op_nodes = ('Gt', 'Lt', 'GtE', 'LtE', 'Eq', 'NotEq', 'BitAnd', 'BitOr',
-                    'Add', 'Sub', 'Mult', 'Div', 'Pow', 'FloorDiv')
+                    'Add', 'Sub', 'Mult', 'Div', 'Pow', 'FloorDiv', 'Mod')
     bin_op_nodes_map = dict(zip(bin_ops, bin_op_nodes))
 
     unary_ops = _unary_ops_syms
     unary_op_nodes = 'UAdd', 'USub', 'Invert'
     unary_op_nodes_map = dict(zip(unary_ops, unary_op_nodes))
 
-    def __init__(self):
+    def __init__(self, env):
         for bin_op in self.bin_ops:
             setattr(self, 'visit_{0}'.format(self.bin_op_nodes_map[bin_op]),
                     lambda node, bin_op=bin_op: partial(BinOp, bin_op))
@@ -31,11 +47,12 @@ class ExprVisitor(ast.NodeVisitor):
             setattr(self,
                     'visit_{0}'.format(self.unary_op_nodes_map[unary_op]),
                     lambda node, unary_op=unary_op: partial(UnaryOp, unary_op))
+        self.env = env
 
     def visit(self, node):
         if not (isinstance(node, ast.AST) or isinstance(node, basestring)):
-            raise AssertionError('"node" must be an AST node or a string, you'
-                                 ' passed a(n) {0}'.format(node.__class__))
+            raise TypeError('"node" must be an AST node or a string, you'
+                            ' passed a(n) {0}'.format(node.__class__))
         if isinstance(node, basestring):
             node = ast.fix_missing_locations(ast.parse(node))
         return super(ExprVisitor, self).visit(node)
@@ -60,14 +77,16 @@ class ExprVisitor(ast.NodeVisitor):
         return op(left, right)
 
     def visit_UnaryOp(self, node):
+        if isinstance(node.op, ast.Not):
+            raise NotImplementedError("not operator not yet supported")
         op = self.visit(node.op)
         return op(self.visit(node.operand))
 
     def visit_Name(self, node):
-        return node.id
+        return Term(node.id, self.env)
 
     def visit_Num(self, node):
-        return node.n
+        return Constant(node.n, self.env)
 
     def visit_Compare(self, node):
         ops = node.ops
@@ -90,16 +109,16 @@ class ExprVisitor(ast.NodeVisitor):
     def visit_Attribute(self, node):
         raise NotImplementedError("attribute access is not yet supported")
 
-    def visit_Mod(self, node):
-        raise NotImplementedError("modulo operator not yet supported")
+    def visit_BoolOp(self, node):
+        raise NotImplementedError("boolean operators are not yet supported")
 
 
-class Expr(object):
-    """Expr object for pandas
-    """
-    def __init__(self, expr, engine, truediv):
+class Expr(StringMixin):
+    """Expr object"""
+    def __init__(self, expr, engine='numexpr', env=None, truediv=True):
         self.expr = expr
-        self._visitor = ExprVisitor()
+        self.env = env or Scope(frame_level=2)
+        self._visitor = ExprVisitor(self.env)
         self.terms = self.parse()
         self.engine = engine
         self.truediv = truediv
@@ -108,28 +127,24 @@ class Expr(object):
         env.locals['truediv'] = self.truediv
         return self.terms(env)
 
-    def __repr__(self):
-        return '{0} -> {1}'.format(self.expr, self.terms)
-
-    def __str__(self):
-        return self.expr
+    def __unicode__(self):
+        return unicode(self.terms)
 
     def parse(self):
         """return a Termset"""
-        try:
-            visited = self._visitor.visit(self.expr)
-        except SyntaxError as e:
-            raise e
-        return visited
+        return self._visitor.visit(self.expr)
 
-    def align(self, env):
+    def align(self):
         """align a set of Terms"""
-        return self.terms.align(env)
+        return self.terms.align(self.env)
 
 
-def isexpr(s):
+def isexpr(s, check_names=True):
     try:
-        Expr(s, engine=None)
+        Expr(s)
     except SyntaxError:
         return False
-    return True
+    except NameError:
+        return not check_names
+    else:
+        return True

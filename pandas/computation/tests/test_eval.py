@@ -1,29 +1,30 @@
 #!/usr/bin/env python
 
+import unittest
 import itertools
 from itertools import product
 
 import nose
-from nose.tools import assert_raises, assert_tuple_equal, assert_equal
-from nose.tools import assert_true
+from nose.tools import assert_raises, assert_tuple_equal
+from nose.tools import assert_true, assert_false
 
-from numpy.random import randn
+from numpy.random import randn, rand
 import numpy as np
-from numpy.testing import assert_array_equal
+from numpy.testing import assert_array_equal, assert_allclose
 from numpy.testing.decorators import slow
 
 import pandas as pd
+from pandas.core import common as com
 from pandas import DataFrame, Series
 from pandas.util.testing import makeCustomDataframe as mkdf
-from pandas.computation.engines import (_engines, _align_core,
-                                        _reconstruct_object)
-from pandas.computation.ops import _binary_ops_dict, _unary_ops_dict
+from pandas.computation.engines import _engines, _reconstruct_object
+from pandas.computation.align import _align_core
+from pandas.computation.ops import _binary_ops_dict, _unary_ops_dict, Term
 import pandas.computation.expr as expr
 from pandas.computation.expressions import _USE_NUMEXPR
 from pandas.computation.eval import Scope
-from pandas.computation.eval import _scope_has_series_and_frame_datetime_index
-from pandas.computation.eval import _maybe_convert_engine
 from pandas.util.testing import assert_frame_equal, randbool
+from pandas.util.py3compat import PY3
 
 
 def skip_numexpr_engine(engine):
@@ -41,14 +42,16 @@ def fractional(x):
 
 
 def hasfractional(x):
-    return np.any(fractional(x) != 0.0)
+    return np.any(fractional(x))
 
 
 def _eval_from_expr(lhs, cmp1, rhs, binop, cmp2):
     f1 = _binary_ops_dict[cmp1]
     f2 = _binary_ops_dict[cmp2]
     bf = _binary_ops_dict[binop]
-    typ, (lhs, rhs), axes = _align_core((lhs, rhs))
+    env = Scope()
+    typ, axes = _align_core((Term('lhs', env), Term('rhs', env)))
+    lhs, rhs = env.locals['lhs'], env.locals['rhs']
     return _reconstruct_object(typ, bf(f1(lhs, rhs), f2(lhs, rhs)), axes)
 
 
@@ -85,8 +88,14 @@ def _eval_bin_and_unary(unary, lhs, arith1, rhs):
     return unop(binop(lhs, rhs))
 
 
+def _series_and_2d_ndarray(lhs, rhs):
+    return (com.is_series(lhs) and isinstance(rhs, np.ndarray) and rhs.ndim > 1
+            or com.is_series(rhs) and isinstance(lhs, np.ndarray) and lhs.ndim
+            > 1)
+
+
 # Smoke testing
-class TestBasicEval(object):
+class TestBasicEval(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
@@ -100,10 +109,14 @@ class TestBasicEval(object):
         self.engine = 'numexpr'
 
     def setup_data(self):
+        nan_df = DataFrame(rand(10, 5))
+        nan_df[nan_df > 0.5] = np.nan
         self.lhses = (DataFrame(randn(10, 5)), Series(randn(5)), randn(),
-                      np.float64(randn()))
+                      np.float64(randn()), randn(10, 5), randn(5), np.nan,
+                      Series([1, 2, np.nan, np.nan, 5]), nan_df)
         self.rhses = (DataFrame(randn(10, 5)), Series(randn(5)), randn(),
-                      np.float64(randn()))
+                      np.float64(randn()), randn(10, 5), randn(5), np.nan,
+                      Series([1, 2, np.nan, np.nan, 5]), nan_df)
 
     def setUp(self):
         try:
@@ -163,9 +176,14 @@ class TestBasicEval(object):
         ex = '(lhs {cmp1} rhs) {binop} (lhs {cmp2} rhs)'.format(cmp1=cmp1,
                                                                 binop=binop,
                                                                 cmp2=cmp2)
-        expected = _eval_from_expr(lhs, cmp1, rhs, binop, cmp2)
-        result = pd.eval(ex, engine=self.engine)
-        assert_array_equal(result, expected)
+        if _series_and_2d_ndarray(lhs, rhs):
+            self.assertRaises(Exception, _eval_from_expr, lhs, cmp1, rhs,
+                              binop, cmp2)
+            self.assertRaises(Exception, pd.eval, ex, engine=self.engine)
+        else:
+            expected = _eval_from_expr(lhs, cmp1, rhs, binop, cmp2)
+            result = pd.eval(ex, engine=self.engine)
+            assert_array_equal(result, expected)
 
     def _create_simple_cmp_op_t(self, lhs, rhs, cmp1):
         ex = 'lhs {0} rhs'.format(cmp1)
@@ -195,7 +213,11 @@ class TestBasicEval(object):
             if arith1 != '//':
                 expected = _eval_single_bin(lhs, arith1, rhs,
                                             engine_has_neg_frac(self.engine))
-                assert_array_equal(result, expected)
+                # roundoff error with modulus
+                if arith1 == '%':
+                    assert_allclose(result, expected)
+                else:
+                    assert_array_equal(result, expected)
 
             # sanity check on recursive parsing
             try:
@@ -226,7 +248,12 @@ class TestBasicEval(object):
                     pass
                 if arith1 != '//':
                     expected = self.ne.evaluate('nlhs {0} ghs'.format(arith1))
-                    assert_array_equal(result, expected)
+
+                    # roundoff error with modulus
+                    if arith1 == '%':
+                        assert_allclose(result, expected)
+                    else:
+                        assert_array_equal(result, expected)
 
     def _create_invert_op_t(self, lhs, cmp1, rhs):
         # simple
@@ -459,7 +486,7 @@ def check_series_frame_commutativity(engine, r_idx_type, c_idx_type, op,
                                                    df)
 
 
-INDEX_TYPES = 'i', 'f', 's', 'u', 'dt',  # 'p'
+INDEX_TYPES = 'i', 'f', 's', 'u', # 'dt',  # 'p'
 
 
 @slow
@@ -525,13 +552,34 @@ def check_datetime_index_rows_punts_to_python(engine):
     index = getattr(df, 'index')
     s = Series(np.random.randn(5), index[:5])
     env = Scope(globals(), locals())
-    assert_true(_scope_has_series_and_frame_datetime_index(env))
-    assert_equal(_maybe_convert_engine(env, engine), 'python')
 
 
 def test_datetime_index_rows_punts_to_python():
     for engine in _engines:
         check_datetime_index_rows_punts_to_python(engine)
+
+
+def test_truediv():
+    for engine in _engines:
+        check_truediv(engine)
+
+
+def check_truediv(engine):
+    s = np.array([1])
+    ex = 's / 1'
+
+    if PY3:
+        res = pd.eval(ex, truediv=False)
+        assert_array_equal(res, np.array([1.0]))
+
+        res = pd.eval(ex, truediv=True)
+        assert_array_equal(res, np.array([1.0]))
+    else:
+        res = pd.eval(ex, truediv=False)
+        assert_array_equal(res, np.array([1]))
+
+        res = pd.eval(ex, truediv=True)
+        assert_array_equal(res, np.array([1.0]))
 
 
 __var_s = randn(10)
@@ -545,6 +593,54 @@ def check_global_scope(engine):
 def test_global_scope():
     for engine in _engines:
         yield check_global_scope, engine
+
+
+def check_is_expr(engine):
+    s = 1
+    valid = 's + 1'
+    invalid = 's +'
+    assert_true(expr.isexpr(valid, check_names=True))
+    assert_true(expr.isexpr(valid, check_names=False))
+    assert_false(expr.isexpr(invalid, check_names=False))
+    assert_false(expr.isexpr(invalid, check_names=True))
+
+
+def test_is_expr():
+    for engine in _engines:
+        check_is_expr(engine)
+
+
+def check_not_fails(engine):
+    x = True
+    assert_raises(NotImplementedError, pd.eval, 'not x', engine=engine,
+                  local_dict={'x': x})
+
+
+def test_not_fails():
+    for engine in _engines:
+        check_not_fails(engine)
+
+
+def check_and_fails(engine):
+    x, y = False, True
+    assert_raises(NotImplementedError, pd.eval, 'x and y', engine=engine,
+                  local_dict={'x': x, 'y': y})
+
+
+def test_and_fails():
+    for engine in _engines:
+        check_and_fails(engine)
+
+
+def check_or_fails(engine):
+    x, y = True, False
+    assert_raises(NotImplementedError, pd.eval, 'x or y', engine=engine,
+                  local_dict={'x': x, 'y': y})
+
+
+def test_or_fails():
+    for engine in _engines:
+        check_or_fails(engine)
 
 
 if __name__ == '__main__':
