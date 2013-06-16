@@ -1,7 +1,6 @@
 import itertools
 import re
 from datetime import datetime
-import copy
 from collections import defaultdict
 
 import numpy as np
@@ -18,8 +17,7 @@ import pandas.core.common as com
 from pandas.sparse.array import _maybe_to_sparse, SparseArray
 import pandas.lib as lib
 import pandas.tslib as tslib
-import pandas.core.expressions as expressions
-from pandas.util.decorators import cache_readonly
+import pandas.computation.expressions as expressions
 
 from pandas.tslib import Timestamp
 from pandas import compat
@@ -3404,7 +3402,6 @@ def _interleaved_dtype(blocks):
     have_float = len(counts[FloatBlock]) > 0
     have_complex = len(counts[ComplexBlock]) > 0
     have_dt64 = len(counts[DatetimeBlock]) > 0
-    have_sparse = len(counts[SparseBlock]) > 0
     have_numeric = have_float or have_complex or have_int
 
     if (have_object or
