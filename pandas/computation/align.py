@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import pandas.core.common as com
 from pandas.computation.ops import is_const
-from pandas.computation.common import flatten
 
 
 def _align_core_single_unary_op(term):
@@ -168,7 +167,7 @@ def _align(terms):
     """Align a set of terms"""
     try:
         # flatten the parse tree (a nested list, really)
-        terms = list(flatten(terms))
+        terms = list(com.flatten(terms))
     except TypeError:
         # can't iterate so it must just be a constant or single variable
         if isinstance(terms.value, (pd.Series, pd.core.generic.NDFrame)):

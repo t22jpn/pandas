@@ -317,16 +317,15 @@ default ``numexpr`` is used for evaluation).
    You should not use :func:`~pandas.computation.eval.eval` for simple
    expressions or for expressions involving small DataFrames. In fact,
    :func:`~pandas.computation.eval.eval` is many orders of magnitude slower for
-   smaller expressions/objects than plain ole' Python. A good rule of thumb is
+   smaller expressions/objects than plain ol' Python. A good rule of thumb is
    to only use :func:`~pandas.computation.eval.eval` when you have a
    :class:`~pandas.core.frame.DataFrame` with more than 10,000 rows.
 
 
 :func:`~pandas.computation.eval.eval` supports all arithmetic expressions
-supported by the engine (by default the engine is ``numexpr``). The ``numexpr``
-engine uses ``numexpr`` under the hood to evaluate expressions efficiently,
-while allowing a slightly modified, and we think more intuitive syntax for
-expressions.
+supported by the engine. The ``numexpr`` engine uses ``numexpr`` under the hood
+to evaluate expressions efficiently, while allowing a slightly modified--and we
+think more intuitive--syntax for expressions.
 
 
 .. note::
@@ -396,15 +395,14 @@ to use as the backend.
 :func:`~pandas.computation.eval.eval` Parsers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The default ``"pandas"`` parser allows a bit more intuitive (we think) syntax
-for expressing query-like operations (comparisons, conjunctions and
-disjunctions). In particular, the precedence of the ``&`` and ``|`` operators
-is made equal to the precedence of the corresponding boolean operations ``and``
-and ``or``.
+The default ``"pandas"`` parser allows a more intuitive syntax for expressing
+query-like operations (comparisons, conjunctions and disjunctions). In
+particular, the precedence of the ``&`` and ``|`` operators is made equal to
+the precedence of the corresponding boolean operations ``and`` and ``or``.
 
-For example, the above conjunction can be written without
-parentheses. Alternatively, you can use the ``'python'`` parser to enforce
-strict Python semantics.
+For example, the above conjunction can be written without parentheses.
+Alternatively, you can use the ``'python'`` parser to enforce strict Python
+semantics.
 
 .. ipython:: python
 

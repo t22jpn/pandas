@@ -348,11 +348,17 @@ class BaseExprVisitor(ast.NodeVisitor):
     def visit_Compare(self, node, **kwargs):
         ops = node.ops
         comps = node.comparators
+        if len(comps) == 1:
+            return self.visit(ops[0])(self.visit(node.left, side='left'),
+                                      self.visit(comps[0], side='right'))
+        left = node.left
+        values = []
         for op, comp in itertools.izip(ops, comps):
-            vop = self.visit(op)
-            node = vop(self.visit(node.left, side='left'),
-                       self.visit(comp, side='right'))
-        return node
+            new_node = self.visit(ast.Compare(comparators=[comp], left=left,
+                                              ops=[op]))
+            left = comp
+            values.append(new_node)
+        return self.visit(ast.BoolOp(op=ast.And(), values=values))
 
     def visit_BoolOp(self, node, **kwargs):
         op = self.visit(node.op)
