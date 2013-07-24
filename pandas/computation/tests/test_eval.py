@@ -28,7 +28,8 @@ import pandas.computation.expr as expr
 from pandas.computation import pytables
 from pandas.computation.expressions import _USE_NUMEXPR
 from pandas.util.testing import (assert_frame_equal, randbool,
-                                 assertRaisesRegexp)
+                                 assertRaisesRegexp,
+                                 assert_produces_warning)
 from pandas.util.py3compat import PY3
 
 
@@ -539,6 +540,20 @@ class TestAlignment(unittest.TestCase):
             self.check_complex_series_frame_alignment(engine, index_name, obj,
                                                       r1, r2, c1, c2)
 
+    def test_performance_warning_for_asenine_alignment(self):
+        df = DataFrame(randn(1000, 10))
+        s = Series(randn(10000))
+        with assert_produces_warning(pd.io.common.PerformanceWarning):
+            pd.eval('df + s')
+
+        s = Series(randn(1000))
+        with assert_produces_warning(False):
+            pd.eval('df + s')
+
+        df = DataFrame(randn(10, 10000))
+        s = Series(randn(10000))
+        with assert_produces_warning(False):
+            pd.eval('df + s')
 
 class TestOperations(unittest.TestCase):
 

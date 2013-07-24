@@ -1,3 +1,4 @@
+import warnings
 from functools import partial, wraps
 from itertools import izip
 
@@ -122,11 +123,23 @@ def _align_core(terms):
 
             if hasattr(ti, 'reindex_axis'):
                 transpose = com.is_series(ti) and naxes > 1
+                reindexer = axes[naxes - 1] if transpose else items
+
+                term_axis_size = len(ti.axes[axis])
+                reindexer_size = len(reindexer)
+
+                if (np.log10(abs(reindexer_size - term_axis_size)) >= 1 and
+                    reindexer_size >= 10000):
+                    warnings.warn("Alignment difference on axis {0} is larger"
+                                  " than an order of magnitude on term {1!r}, "
+                                  "performance may suffer".format(axis, term),
+                                  category=pd.io.common.PerformanceWarning)
 
                 if transpose:
-                    f = partial(ti.reindex, index=axes[naxes - 1], copy=False)
+                    f = partial(ti.reindex, index=reindexer, copy=False)
                 else:
-                    f = partial(ti.reindex_axis, items, axis=axis, copy=False)
+                    f = partial(ti.reindex_axis, reindexer, axis=axis,
+                                copy=False)
 
                 if pd.lib.is_bool_array(ti.values):
                     r = f(fill_value=True)
