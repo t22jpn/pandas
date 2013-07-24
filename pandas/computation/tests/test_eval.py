@@ -680,6 +680,29 @@ class TestScope(unittest.TestCase):
         for engine in _engines:
             self.check_no_new_globals(engine)
 
+    def test_nested_scope(self):
+        x = 1
+        result = pd.eval('x + 1')
+        self.assertEqual(result, 2)
+
+        df  = DataFrame(np.random.randn(2000, 10))
+        df2 = DataFrame(np.random.randn(2000, 10))
+        expected = df[(df>0) & (df2>0)]
+
+        result = df['(df>0) & (df2>0)']
+        assert_frame_equal(result,expected)
+
+        result = df.query('(df>0) & (df2>0)')
+        assert_frame_equal(result,expected)
+
+        ##### this fails ####
+        #result = pd.eval('df[(df>0) & (df2>0)]')
+        #assert_frame_equal(result,expected)
+
+        #### also fails ####
+        #self.assertRaises(NotImplementedError, pd.eval,
+                          #'df[(df > 0) & (df2 > 0)]')
+
 
 def test_invalid_engine():
     assertRaisesRegexp(KeyError, 'Invalid engine \'asdf\' passed',
