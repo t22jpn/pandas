@@ -4,8 +4,6 @@ import sys
 import inspect
 import itertools
 import tokenize
-import random
-import string
 import datetime
 
 from cStringIO import StringIO
@@ -27,26 +25,45 @@ def _ensure_scope(level=2, global_dict=None, local_dict=None, resolvers=None,
 
 
 class Scope(StringMixin):
+    """Object to hold scope, with a few bells to deal with some custom syntax
+    added by pandas.
+
+    Parameters
+    ----------
+    gbls : dict or None, optional, default None
+    lcls : dict or Scope or None, optional, default None
+    level : int, optional, default 1
+    resolvers : list-like or None, optional, default None
+
+    Attributes
+    ----------
+    globals : dict
+    locals : dict
+    level : int
+    resolvers : tuple
+    resolver_keys : frozenset
+    """
     __slots__ = ('globals', 'locals', 'resolvers', '_global_resolvers',
                  'resolver_keys', '_resolver', 'level')
 
     def __init__(self, gbls=None, lcls=None, level=1, resolvers=None):
         self.level = level
-        self.resolvers = resolvers or []
+        self.resolvers = tuple(resolvers or [])
         self.globals = dict()
         self.locals = dict()
+        self.ntemps = 0  # number of temporary variables in this scope
 
         if isinstance(lcls, Scope):
             ld, lcls = lcls, dict()
-            self.locals.update(ld.locals)
-            self.globals.update(ld.globals)
-            self.resolvers.extend(ld.resolvers)
+            self.locals.update(ld.locals.copy())
+            self.globals.update(ld.globals.copy())
+            self.resolvers += ld.resolvers
             self.update(ld.level)
 
         frame = sys._getframe(level)
         try:
-            self.globals.update(gbls or frame.f_globals.copy())
-            self.locals.update(lcls or frame.f_locals.copy())
+            self.globals.update(gbls or frame.f_globals)
+            self.locals.update(lcls or frame.f_locals)
         finally:
             del frame
 
@@ -58,9 +75,11 @@ class Scope(StringMixin):
         self.globals['True'] = True
         self.globals['False'] = False
 
-        self.resolver_keys = set(reduce(operator.add, (list(o.keys()) for o in
-                                                       self.resolvers), []))
-        self._global_resolvers = self.resolvers + [self.locals, self.globals]
+        self.resolver_keys = frozenset(reduce(operator.add, (list(o.keys()) for
+                                                             o in
+                                                             self.resolvers),
+                                              []))
+        self._global_resolvers = self.resolvers + (self.locals, self.globals)
         self._resolver = None
 
     def __unicode__(self):
@@ -70,7 +89,7 @@ class Scope(StringMixin):
                                              self.resolver_keys))
 
     def __getitem__(self, key):
-        return self.locals.get(key,self.globals[key])
+        return self.resolver(key)
 
     @property
     def resolver(self):
@@ -86,9 +105,14 @@ class Scope(StringMixin):
         return self._resolver
 
     def update(self, level=None):
+        """Update the current scope by going back `level` levels.
 
+        Parameters
+        ----------
+        level : int or None, optional, default None
+        """
         # we are always 2 levels below the caller
-        # plus the caller maybe below the env level
+        # plus the caller may be below the env level
         # in which case we need addtl levels
         sl = 2
         if level is not None:
@@ -108,8 +132,38 @@ class Scope(StringMixin):
                 self.locals.update(f.f_locals)
                 self.globals.update(f.f_globals)
         finally:
-            del frame
-            del frames
+            del frame, frames
+
+    def add_tmp(self, value, where='locals'):
+        """Add a temporary variable to the scope.
+
+        Parameters
+        ----------
+        value : object
+            An arbitrary object to be assigned to a temporary variable.
+        where : basestring, optional, default 'locals', {'locals', 'globals'}
+            What scope to add the value to.
+
+        Returns
+        -------
+        name : basestring
+            The name of the temporary variable created.
+        """
+        d = getattr(self, where, None)
+
+        if d is None:
+            raise AttributeError("Cannot add value to non-existent scope "
+                                 "{0!r}".format(where))
+        if not isinstance(d, dict):
+            raise TypeError("Cannot add value to object of type {0!r}, "
+                            "scope must be a dictionary"
+                            "".format(d.__class__.__name__))
+        name = 'tmp_var_{0}_{1}'.format(self.ntemps, pd.util.testing.rands(10))
+        d[name] = value
+
+        # only increment if the variable gets put in the scope
+        self.ntemps += 1
+        return name
 
 
 def _rewrite_assign(source):
@@ -242,7 +296,7 @@ class BaseExprVisitor(ast.NodeVisitor):
         self.preparser = preparser
 
     def visit(self, node, **kwargs):
-        parse = lambda x: ast.fix_missing_locations(ast.parse(x))
+        parse = ast.parse
         if isinstance(node, basestring):
             clean = self.preparser(node)
         elif isinstance(node, ast.AST):
@@ -294,7 +348,6 @@ class BaseExprVisitor(ast.NodeVisitor):
         return self.visit(node.value)
 
     def visit_Subscript(self, node, **kwargs):
-        from pandas.util.testing import rands
         value = self.visit(node.value)
         slobj = self.visit(node.slice)
         expr = com.pprint_thing(slobj)
@@ -302,14 +355,15 @@ class BaseExprVisitor(ast.NodeVisitor):
                          global_dict=self.env.globals,
                          resolvers=self.env.resolvers)
         try:
-            v = value.value[result]  # should always be Term
+            # a Term instance
+            v = value.value[result]
         except AttributeError:
+            # an Op instance
             lhs = pd.eval(com.pprint_thing(value), local_dict=self.env.locals,
                           global_dict=self.env.globals,
                           resolvers=self.env.resolvers)
             v = lhs[result]
-        name = random.choice(string.ascii_letters + '_') + rands(100)
-        self.env.locals[name] = v
+        name = self.env.add_tmp(v)
         return Term(name, env=self.env)
 
     def visit_Slice(self, node, **kwargs):
@@ -335,14 +389,15 @@ class BaseExprVisitor(ast.NodeVisitor):
         attr = node.attr
         value = node.value
 
-        ctx = node.ctx.__class__
-        if ctx == ast.Load:
+        ctx = node.ctx
+        if isinstance(ctx, ast.Load):
             # resolve the value
             resolved = self.visit(value).value
             try:
-                return getattr(resolved, attr)
-            except (AttributeError):
-
+                v = getattr(resolved, attr)
+                name = self.env.add_tmp(v)
+                return Term(name, self.env)
+            except AttributeError:
                 # something like datetime.datetime where scope is overriden
                 if isinstance(value, ast.Name) and value.id == attr:
                     return resolved
@@ -419,9 +474,9 @@ _numexpr_supported_calls = frozenset(_reductions + _mathops)
 
 
 @disallow((_unsupported_nodes | _python_not_supported) -
-          (_boolop_nodes | frozenset(['BoolOp'])))
+          (_boolop_nodes | frozenset(['BoolOp', 'Attribute'])))
 class PandasExprVisitor(BaseExprVisitor):
-    def __init__(self, env, preparser=_preparse):
+    def __init__(self, env, preparser=_replace_booleans):
         super(PandasExprVisitor, self).__init__(env, preparser)
 
 

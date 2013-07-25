@@ -77,7 +77,7 @@ def _filter_special_cases(f):
             return _align_core_single_unary_op(terms[0])
 
         term_values = (term.value for term in terms)
-        # only scalars
+        # only scalars or indexes
         if all(isinstance(term.value, pd.Index) or term.isscalar for term in
                terms):
             return np.result_type(*term_values), None
@@ -100,7 +100,7 @@ def _align_core(terms):
     term_index = [i for i, term in enumerate(terms) if hasattr(term.value,
                                                                'axes')]
     term_dims = [terms[i].value.ndim for i in term_index]
-    ndims = pd.Series(dict(zip(term_index, term_dims)))
+    ndims = pd.Series(dict(izip(term_index, term_dims)))
 
     # initial axes are the axes of the largest-axis'd term
     biggest = terms[ndims.idxmax()].value
@@ -114,7 +114,8 @@ def _align_core(terms):
                 ax, itm = naxes - 1, term.value.index
             else:
                 ax, itm = axis, items
-            axes[ax] = axes[ax].join(itm, how='outer')
+            if not axes[ax].equals(itm):
+                axes[ax] = axes[ax].join(itm, how='outer')
 
     for i, ndim in ndims.iteritems():
         for axis, items in izip(xrange(ndim), axes):
