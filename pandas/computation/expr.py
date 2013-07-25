@@ -4,18 +4,20 @@ import sys
 import inspect
 import itertools
 import tokenize
+import random
+import string
+import datetime
+
 from cStringIO import StringIO
 from functools import partial
 
+import pandas as pd
 from pandas.core.base import StringMixin
 from pandas.core import common as com
-from pandas.computation.ops import (BinOp, UnaryOp, _reductions, _mathops,
-                                    _cmp_ops_syms, _bool_ops_syms,
-                                    _arith_ops_syms, _unary_ops_syms, Term,
-                                    Constant)
-
-import pandas.lib as lib
-import datetime
+from pandas.computation.ops import (_cmp_ops_syms, _bool_ops_syms,
+                                    _arith_ops_syms, _unary_ops_syms)
+from pandas.computation.ops import _reductions, _mathops
+from pandas.computation.ops import BinOp, UnaryOp, Term, Constant
 
 
 def _ensure_scope(level=2, global_dict=None, local_dict=None, resolvers=None,
@@ -49,7 +51,7 @@ class Scope(StringMixin):
             del frame
 
         # add some useful defaults
-        self.globals['Timestamp'] = lib.Timestamp
+        self.globals['Timestamp'] = pd.lib.Timestamp
         self.globals['datetime'] = datetime
 
         # SUCH a hack
@@ -62,9 +64,10 @@ class Scope(StringMixin):
         self._resolver = None
 
     def __unicode__(self):
-        return "locals: {0}\nglobals: {0}\nresolvers: {0}".format(self.locals.keys(),
-                                                                  self.globals.keys(),
-                                                                  self.resolver_keys)
+        return com.pprint_thing("locals: {0}\nglobals: {0}\nresolvers: "
+                                "{0}".format(self.locals.keys(),
+                                             self.globals.keys(),
+                                             self.resolver_keys))
 
     def __getitem__(self, key):
         return self.locals.get(key,self.globals[key])
@@ -117,21 +120,12 @@ def _rewrite_assign(source):
     return tokenize.untokenize(res)
 
 
-def _parenthesize_booleans(source, ops='|&'):
-    res = source
-    for op in ops:
-        terms = res.split(op)
-
-        t = []
-        for term in terms:
-            t.append('({0})'.format(term))
-
-        res = op.join(t)
-    return res
+def _replace_booleans(source):
+    return source.replace('|', ' or ').replace('&', ' and ')
 
 
 def _preparse(source):
-    return _parenthesize_booleans(_rewrite_assign(source))
+    return _replace_booleans(_rewrite_assign(source))
 
 
 
@@ -168,16 +162,15 @@ _alias_nodes = _filter_nodes(ast.alias)
 _hacked_nodes = frozenset(['Assign', 'Module', 'Expr'])
 
 
+_unsupported_expr_nodes = frozenset(['Yield', 'GeneratorExp', 'IfExp',
+                                     'DictComp', 'SetComp', 'Repr', 'Lambda',
+                                     'Set', 'In', 'NotIn', 'AST', 'Is',
+                                     'IsNot'])
+
 # these nodes are low priority or won't ever be supported (e.g., AST)
 _unsupported_nodes = ((_stmt_nodes | _mod_nodes | _handler_nodes |
                        _arguments_nodes | _keyword_nodes | _alias_nodes |
-                       _expr_context_nodes | frozenset(['Yield',
-                                                        'GeneratorExp',
-                                                        'IfExp', 'DictComp',
-                                                        'SetComp', 'Repr',
-                                                        'Lambda', 'Set', 'In',
-                                                        'NotIn', 'AST', 'Is',
-                                                        'IsNot'])) -
+                       _expr_context_nodes | _unsupported_expr_nodes) -
                       _hacked_nodes)
 
 # we're adding a different assignment in some cases to be equality comparison
@@ -301,15 +294,23 @@ class BaseExprVisitor(ast.NodeVisitor):
         return self.visit(node.value)
 
     def visit_Subscript(self, node, **kwargs):
-        """ df.index[4:6] """
+        from pandas.util.testing import rands
         value = self.visit(node.value)
         slobj = self.visit(node.slice)
-
+        expr = com.pprint_thing(slobj)
+        result = pd.eval(expr, local_dict=self.env.locals,
+                         global_dict=self.env.globals,
+                         resolvers=self.env.resolvers)
         try:
-            return Constant(value[slobj], self.env)
-        except TypeError:
-            raise ValueError("cannot subscript [{0}] with "
-                             "[{1}]".format(value, slobj))
+            v = value.value[result]  # should always be Term
+        except AttributeError:
+            lhs = pd.eval(com.pprint_thing(value), local_dict=self.env.locals,
+                          global_dict=self.env.globals,
+                          resolvers=self.env.resolvers)
+            v = lhs[result]
+        name = random.choice(string.ascii_letters + '_') + rands(100)
+        self.env.locals[name] = v
+        return Term(name, env=self.env)
 
     def visit_Slice(self, node, **kwargs):
         """ df.index[slice(4,6)] """
@@ -412,20 +413,22 @@ class BaseExprVisitor(ast.NodeVisitor):
         return reduce(visitor, operands)
 
 
-_python_not_supported = frozenset(['Assign', 'Str', 'Slice', 'Index',
-                                   'Subscript', 'Tuple', 'List', 'Dict',
-                                   'Call'])
+_python_not_supported = frozenset(['Assign', 'Str', 'Tuple', 'List', 'Dict',
+                                   'Call', 'BoolOp'])
 _numexpr_supported_calls = frozenset(_reductions + _mathops)
 
-@disallow((_unsupported_nodes | _python_not_supported) - _boolop_nodes)
+
+@disallow((_unsupported_nodes | _python_not_supported) -
+          (_boolop_nodes | frozenset(['BoolOp'])))
 class PandasExprVisitor(BaseExprVisitor):
     def __init__(self, env, preparser=_preparse):
         super(PandasExprVisitor, self).__init__(env, preparser)
 
 
-@disallow(_unsupported_nodes | _python_not_supported)
+@disallow(_unsupported_nodes | _python_not_supported | frozenset(['Not']))
 class PythonExprVisitor(BaseExprVisitor):
-    pass
+    def __init__(self, env, preparser=lambda x: x):
+        super(PythonExprVisitor, self).__init__(env, preparser=preparser)
 
 
 class Expr(StringMixin):

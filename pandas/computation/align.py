@@ -42,13 +42,12 @@ def _maybe_promote_shape(values, naxes):
     if ndims == naxes:
         return values
 
-    ndim = set(xrange(ndims))
-    nax = set(xrange(naxes))
+    ndim, nax = range(ndims), range(naxes)
 
     axes_slice = [slice(None)] * naxes
 
-    # symmetric difference of numaxes and ndims
-    slices = nax - ndim
+    # set difference of numaxes and ndims
+    slices = com.difference(nax, ndim)
 
     if ndims == naxes:
         if slices:
@@ -88,7 +87,7 @@ def _filter_special_cases(f):
         if all_has_size and all(term.value.size == 1 for term in terms):
             return np.result_type(*term_values), None
 
-        # no pandas so just punt to the evaluator
+        # no pandas objects
         if not _any_pandas_objects(terms):
             return np.result_type(*term_values), None
 
@@ -163,10 +162,10 @@ def _align_core(terms):
 
 def _filter_terms(flat):
     # numeric literals
-    literals = set(filter(is_const, flat))
+    literals = frozenset(filter(is_const, flat))
 
     # these are strings which are variable names
-    names = set(flat) - literals
+    names = frozenset(flat) - literals
 
     # literals are not names and names are not literals, so intersection should
     # be empty

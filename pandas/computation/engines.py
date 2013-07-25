@@ -1,5 +1,6 @@
 import abc
 
+from pandas.core import common as com
 from pandas.computation.align import _align, _reconstruct_object
 
 
@@ -45,14 +46,15 @@ class NumExprEngine(AbstractEngine):
         super(NumExprEngine, self).__init__(expr)
 
     def convert(self):
-        """Return a string"""
-        return '%s' % self.expr
+        """Return a string of the expression"""
+        return com.pprint_thing(self.expr)
 
     def _evaluate(self, env):
         import numexpr as ne
 
         try:
-            return ne.evaluate(self.convert(), local_dict=env.locals,
+            s = self.convert()
+            return ne.evaluate(s, local_dict=env.locals,
                                global_dict=env.globals,
                                truediv=self.expr.truediv)
         except KeyError as e:

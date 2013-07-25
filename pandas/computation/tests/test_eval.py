@@ -555,6 +555,7 @@ class TestAlignment(unittest.TestCase):
         with assert_produces_warning(False):
             pd.eval('df + s')
 
+
 class TestOperations(unittest.TestCase):
 
     def check_simple_arith_ops(self, engine):
@@ -659,6 +660,47 @@ class TestOperations(unittest.TestCase):
             res = pd.eval(ex, truediv=True)
             assert_array_equal(res, np.array([1.0]))
 
+    def test_python_fails_and(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(NotImplementedError, pd.eval, 'df > 2 and df > 3',
+                          local_dict={'df': df}, parser='python')
+
+    def test_python_fails_or(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(NotImplementedError, pd.eval, 'df > 2 or df > 3',
+                          local_dict={'df': df}, parser='python')
+
+    def test_python_fails_not(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(NotImplementedError, pd.eval, 'not df > 2',
+                          local_dict={'df': df}, parser='python')
+
+    def test_python_fails_ampersand(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(TypeError, pd.eval,
+                          '(df + 2)[df > 1] > 0 & (df > 0)',
+                          local_dict={'df': df}, parser='python')
+
+
+    def check_failing_subscript_with_name_error(self, engine):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(NameError, pd.eval, 'df[x > 2] > 2',
+                          local_dict={'df': df}, engine=engine)
+
+    def test_failing_subscript_with_name_error(self):
+        for engine in _engines:
+            self.check_failing_subscript_with_name_error(engine)
+
+    def check_lhs_expression_subscript(self, engine):
+        df = DataFrame(np.random.randn(5, 3))
+        result = pd.eval('(df + 1)[df > 2]', engine=engine)
+        expected = (df + 1)[df > 2]
+        assert_frame_equal(result, expected)
+
+    def test_lhs_expression_subscript(self):
+        for engine in _engines:
+            self.check_lhs_expression_subscript(engine)
+
 
 _var_s = randn(10)
 
@@ -695,28 +737,36 @@ class TestScope(unittest.TestCase):
         for engine in _engines:
             self.check_no_new_globals(engine)
 
-    def test_nested_scope(self):
+    def check_nested_scope(self, engine):
+        # smoke test
         x = 1
-        result = pd.eval('x + 1')
+        result = pd.eval('x + 1', engine=engine)
         self.assertEqual(result, 2)
 
-        df  = DataFrame(np.random.randn(2000, 10))
-        df2 = DataFrame(np.random.randn(2000, 10))
+        df  = DataFrame(np.random.randn(5, 3))
+        df2 = DataFrame(np.random.randn(5, 3))
         expected = df[(df>0) & (df2>0)]
 
         result = df['(df>0) & (df2>0)']
-        assert_frame_equal(result,expected)
+        assert_frame_equal(result, expected)
 
-        result = df.query('(df>0) & (df2>0)')
-        assert_frame_equal(result,expected)
+        result = df.query('(df>0) & (df2>0)', engine=engine)
+        assert_frame_equal(result, expected)
 
-        ##### this fails ####
-        #result = pd.eval('df[(df>0) & (df2>0)]')
-        #assert_frame_equal(result,expected)
+        result = pd.eval('df[(df > 0) and (df2 > 0)]', engine=engine)
+        assert_frame_equal(result, expected)
 
-        #### also fails ####
-        #self.assertRaises(NotImplementedError, pd.eval,
-                          #'df[(df > 0) & (df2 > 0)]')
+        result = pd.eval('df[(df > 0) and (df2 > 0) and df[df > 0] > 0]', engine=engine)
+        expected = df[(df > 0) & (df2 > 0) & (df[df > 0] > 0)]
+        assert_frame_equal(result, expected)
+
+        result = pd.eval('df[(df>0) & (df2>0)]',engine=engine)
+        expected = df.query('(df>0) & (df2>0)', engine=engine)
+        assert_frame_equal(result, expected)
+
+    def test_nested_scope(self):
+        for engine in _engines:
+            self.check_nested_scope(engine)
 
 
 def test_invalid_engine():
