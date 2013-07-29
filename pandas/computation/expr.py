@@ -327,7 +327,8 @@ class BaseExprVisitor(ast.NodeVisitor):
 
     def visit_UnaryOp(self, node, **kwargs):
         op = self.visit(node.op)
-        return op(self.visit(node.operand))
+        operand = self.visit(node.operand)
+        return op(operand)
 
     def visit_Name(self, node, **kwargs):
         return Term(node.id, self.env)
@@ -437,14 +438,20 @@ class BaseExprVisitor(ast.NodeVisitor):
     def visit_Compare(self, node, **kwargs):
         ops = node.ops
         comps = node.comparators
+
+        def translate(op):
+            if isinstance(op,ast.In):
+                return ast.Eq()
+            return op
+
         if len(comps) == 1:
-            return self.visit(ops[0])(self.visit(node.left, side='left'),
-                                      self.visit(comps[0], side='right'))
+            return self.visit(translate(ops[0]))(self.visit(node.left, side='left'),
+                                                 self.visit(comps[0], side='right'))
         left = node.left
         values = []
         for op, comp in itertools.izip(ops, comps):
             new_node = self.visit(ast.Compare(comparators=[comp], left=left,
-                                              ops=[op]))
+                                              ops=[translate(op)]))
             left = comp
             values.append(new_node)
         return self.visit(ast.BoolOp(op=ast.And(), values=values))

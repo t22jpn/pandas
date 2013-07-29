@@ -2861,6 +2861,11 @@ class TestHDFStore(unittest.TestCase):
             expected = df.loc[:,df.columns-['A','B']]
             tm.assert_frame_equal(result, expected)
 
+            # in
+            result = store.select('df', "index>df.index[3] & columns in ['A','B']")
+            expected = df.loc[df.index>df.index[3]].reindex(columns=['A','B'])
+            tm.assert_frame_equal(result, expected)
+
     def test_invalid_filtering(self):
 
         # can't use more than one filter (atm)

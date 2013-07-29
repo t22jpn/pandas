@@ -216,7 +216,6 @@ def _reconstruct_object(typ, obj, axes, dtype):
         An object of type ``typ`` with the value `obj` and possible axes
         `axes`.
     """
-    #import ipdb; ipdb.set_trace()
     try:
         typ = typ.type
     except AttributeError:

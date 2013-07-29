@@ -6,22 +6,12 @@ import warnings
 from functools import partial
 from datetime import datetime
 
-import numpy as np
-
+import pandas as pd
 import pandas.core.common as com
-import pandas.lib as lib
 from pandas.computation import expr, ops
 from pandas.computation.ops import is_term, Constant
 from pandas.computation.expr import BaseExprVisitor
-from pandas import Index
-from pandas.core.common import is_list_like
-
-
-def _ensure_decoded(s):
-    """ if we have bytes, decode them to unicode """
-    if isinstance(s, (np.bytes_, bytes)):
-        s = s.decode('UTF-8')
-    return s
+from pandas.computation.common import _ensure_decoded
 
 
 class Scope(expr.Scope):
@@ -42,7 +32,6 @@ class Term(ops.Term):
         super(Term, self).__init__(name, env, side=side)
 
     def _resolve_name(self):
-
         # must be a queryables
         if self.side == 'left':
             if self.name not in self.env.queryables:
@@ -112,7 +101,7 @@ class BinOp(ops.BinOp):
 
     def conform(self, rhs):
         """ inplace conform rhs """
-        if not is_list_like(rhs):
+        if not com.is_list_like(rhs):
             rhs = [rhs]
         if hasattr(self.rhs, 'ravel'):
             rhs = rhs.ravel()
@@ -144,24 +133,25 @@ class BinOp(ops.BinOp):
         accepted by pytables """
 
         def stringify(value):
-            value = str(value)
             if self.encoding is not None:
-                value = value.encode(self.encoding)
-            return value
+                encoder = partial(com.pprint_thing_encoded,
+                                  encoding=self.encoding)
+            else:
+                encoder = com.pprint_thing
+            return encoder(value)
 
         kind = _ensure_decoded(self.kind)
         if kind == u'datetime64' or kind == u'datetime':
-
             if isinstance(v, (int, float)):
                 v = stringify(v)
             v = _ensure_decoded(v)
-            v = lib.Timestamp(v)
+            v = pd.Timestamp(v)
             if v.tz is not None:
                 v = v.tz_convert('UTC')
             return TermValue(v, v.value, kind)
         elif isinstance(v, datetime) or hasattr(v, 'timetuple') or kind == u'date':
             v = time.mktime(v.timetuple())
-            return TermValue(v, lib.Timestamp(v), kind)
+            return TermValue(v, pd.Timestamp(v), kind)
         elif kind == u'integer':
             v = int(float(v))
             return TermValue(v, v, kind)
@@ -181,6 +171,9 @@ class BinOp(ops.BinOp):
 
         # string quoting
         return TermValue(v, stringify(v), u'string')
+
+    def convert_values(self):
+        pass
 
 
 class FilterBinOp(BinOp):
@@ -221,7 +214,7 @@ class FilterBinOp(BinOp):
                 self.filter = (
                     self.lhs,
                     filter_op,
-                    Index([v.value for v in values]))
+                    pd.Index([v.value for v in values]))
 
                 return self
             return None
@@ -233,7 +226,7 @@ class FilterBinOp(BinOp):
             self.filter = (
                 self.lhs,
                 filter_op,
-                Index([v.value for v in values]))
+                pd.Index([v.value for v in values]))
 
         else:
             raise TypeError(
@@ -400,7 +393,7 @@ class Expr(expr.Expr):
     Parameters
     ----------
     where : string term expression, Expr, or list-like of Exprs
-    queryables : a kinds map (dict of column name -> kind), or None i column is non-indexable
+    queryables : a "kinds" map (dict of column name -> kind), or None if column is non-indexable
     encoding : an encoding that will encode the query terms
 
     Returns
