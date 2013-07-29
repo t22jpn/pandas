@@ -1,10 +1,13 @@
 import operator as op
+from functools import partial
 
 import numpy as np
 
+import pandas as pd
 from pandas.util.py3compat import PY3
 import pandas.core.common as com
 from pandas.core.base import StringMixin
+from pandas.computation.common import _ensure_decoded
 
 
 _reductions = 'sum', 'prod'
@@ -26,11 +29,12 @@ class BinaryOperatorError(OperatorError):
 
 
 class Term(StringMixin):
-    def __init__(self, name, env, side=None):
-        self.name = name
+    def __init__(self, name, env, side=None, encoding=None):
+        self._name = name
         self.env = env
         self.side = side
-        self.value = self._resolve_name()
+        self._value = self._resolve_name()
+        self.encoding = encoding
 
     def __unicode__(self):
         return com.pprint_thing(self.name)
@@ -76,20 +80,20 @@ class Term(StringMixin):
 
     @property
     def isscalar(self):
-        return np.isscalar(self.value)
+        return np.isscalar(self._value)
 
     @property
     def type(self):
         try:
-            # ndframe potentially very slow for large, mixed dtype frames
-            return self.value.values.dtype
+            # potentially very slow for large, mixed dtype frames
+            return self._value.values.dtype
         except AttributeError:
             try:
                 # ndarray
-                return self.value.dtype
+                return self._value.dtype
             except AttributeError:
                 # scalar
-                return type(self.value)
+                return type(self._value)
 
     return_type = type
 
@@ -99,13 +103,50 @@ class Term(StringMixin):
                                 ''.format(self.__class__.__name__, self.name,
                                           self.type))
 
+    @property
+    def kind(self):
+        try:
+            return self.type.__name__
+        except AttributeError:
+            return self.type.type.__name__
+
+    @property
+    def value(self):
+        kind = self.kind.lower()
+        if kind == 'datetime64':
+            try:
+                return self._value.asi8
+            except AttributeError:
+                return self._value.view('i8')
+        elif kind == 'datetime':
+            return pd.Timestamp(self._value)
+        elif kind == 'timestamp':
+            return self._value.asm8.view('i8')
+        return self._value
+
+    @value.setter
+    def value(self, new_value):
+        self._value = new_value
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, new_name):
+        self._name = new_name
+
 
 class Constant(Term):
     def __init__(self, value, env):
         super(Constant, self).__init__(value, env)
 
     def _resolve_name(self):
-        return self.name
+        return self._name
+
+    @property
+    def name(self):
+        return self.value
 
 
 def _print_operand(opr):
@@ -122,6 +163,7 @@ class Op(StringMixin):
     def __init__(self, op, operands, *args, **kwargs):
         self.op = _get_op(op)
         self.operands = operands
+        self.encoding = kwargs.get('encoding', None)
 
     def __iter__(self):
         return iter(self.operands)
@@ -147,6 +189,7 @@ class Op(StringMixin):
                                             ', '.join('{0}'.format(opr.raw) for
                                                       opr in self.operands)))
         return parened
+
 
 _cmp_ops_syms = '>', '<', '>=', '<=', '==', '!='
 _cmp_ops_funcs = op.gt, op.lt, op.ge, op.le, op.eq, op.ne
@@ -209,11 +252,13 @@ class BinOp(Op):
         self.lhs = lhs
         self.rhs = rhs
 
+        self.convert_values()
+
         try:
             self.func = _binary_ops_dict[op]
         except KeyError:
             keys = _binary_ops_dict.keys()
-            raise BinaryOperatorError('Invalid binary operator {0}, valid'
+            raise BinaryOperatorError('Invalid binary operator {0!r}, valid'
                                       ' operators are {1}'.format(op, keys))
 
     def __call__(self, env):
@@ -244,6 +289,39 @@ class BinOp(Op):
             res = self.func(left, right)
 
         return res
+
+    def convert_values(self):
+        def stringify(value):
+            if self.encoding is not None:
+                encoder = partial(com.pprint_thing_encoded,
+                                  encoding=self.encoding)
+            else:
+                encoder = com.pprint_thing
+            return encoder(value)
+
+        lhs, rhs = self.lhs, self.rhs
+
+        if (is_term(lhs) and lhs.kind.startswith('datetime') and is_term(rhs)
+            and rhs.isscalar):
+            v = rhs.value
+            if isinstance(v, (int, float)):
+                v = stringify(v)
+            v = _ensure_decoded(v)
+            v = pd.Timestamp(v)
+            if v.tz is not None:
+                v = v.tz_convert('UTC')
+            self.rhs.update(v)
+
+        if (is_term(rhs) and rhs.kind.startswith('datetime') and
+            is_term(lhs) and lhs.isscalar):
+            v = lhs.value
+            if isinstance(v, (int, float)):
+                v = stringify(v)
+            v = _ensure_decoded(v)
+            v = pd.Timestamp(v)
+            if v.tz is not None:
+                v = v.tz_convert('UTC')
+            self.lhs.update(v)
 
 
 class Mod(BinOp):

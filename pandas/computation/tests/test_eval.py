@@ -16,7 +16,7 @@ from numpy.testing.decorators import slow
 
 import pandas as pd
 from pandas.core import common as com
-from pandas import DataFrame, Series, Panel
+from pandas import DataFrame, Series, Panel, date_range
 from pandas.util.testing import makeCustomDataframe as mkdf
 from pandas.computation.engines import _engines
 from pandas.computation.expr import PythonExprVisitor, PandasExprVisitor
@@ -399,7 +399,7 @@ class TestAlignment(unittest.TestCase):
     def check_align_nested_unary_op(self, engine):
         skip_numexpr_engine(engine)
         s = 'df * ~2'
-        df = mkdf(10, 10, data_gen_f=f)
+        df = mkdf(5, 3, data_gen_f=f)
         res = pd.eval(s, engine=engine)
         assert_frame_equal(res, df * ~2)
 
@@ -818,6 +818,13 @@ class TestOperations(unittest.TestCase):
         res = df['a < b < c and (not bools) or bools > 2']
         expec = df[(df.a < df.b) & (df.b < df.c) & (~df.bools) | (df.bools > 2)]
         assert_frame_equal(res, expec)
+
+    def test_date_boolean(self):
+        df = DataFrame(randn(5, 3))
+        df['dates1'] = date_range('1/1/2012', periods=5)
+        res = pd.eval('df.dates1 < 20130101')
+        expec = df.dates1 < '20130101'
+        assert_series_equal(res, expec)
 
 _var_s = randn(10)
 

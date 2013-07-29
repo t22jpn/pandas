@@ -9,7 +9,7 @@ from datetime import datetime
 import pandas as pd
 import pandas.core.common as com
 from pandas.computation import expr, ops
-from pandas.computation.ops import is_term, Constant
+from pandas.computation.ops import is_term
 from pandas.computation.expr import BaseExprVisitor
 from pandas.computation.common import _ensure_decoded
 
@@ -41,6 +41,22 @@ class Term(ops.Term):
         # resolve the rhs (and allow to be None)
         return self.env.locals.get(self.name,
                                    self.env.globals.get(self.name, self.name))
+
+    @property
+    def value(self):
+        return self._value
+
+
+class Constant(Term):
+    def __init__(self, value, env):
+        super(Constant, self).__init__(value, env)
+
+    def _resolve_name(self):
+        return self._name
+
+    @property
+    def name(self):
+        return self._value
 
 
 class BinOp(ops.BinOp):
@@ -334,6 +350,9 @@ class UnaryOp(ops.UnaryOp):
 _op_classes = {'unary': UnaryOp}
 
 class ExprVisitor(BaseExprVisitor):
+    const_type = Constant
+    term_type = Term
+
     def __init__(self, env, **kwargs):
         super(ExprVisitor, self).__init__(env)
         for bin_op in self.binary_ops:
@@ -341,19 +360,16 @@ class ExprVisitor(BaseExprVisitor):
                     lambda node, bin_op=bin_op: partial(BinOp, bin_op,
                                                         **kwargs))
 
-    def visit_Name(self, node, side=None, **kwargs):
-        return Term(node.id, self.env, side=side, **kwargs)
-
     def visit_UnaryOp(self, node, **kwargs):
         if isinstance(node.op, (ast.Not, ast.Invert)):
             return UnaryOp('~', self.visit(node.operand))
         elif isinstance(node.op, ast.USub):
-            return Constant(-self.visit(node.operand).value, self.env)
+            return self.const_type(-self.visit(node.operand).value, self.env)
         elif isinstance(node.op, ast.UAdd):
             raise NotImplementedError('Unary addition not supported')
 
     def visit_USub(self, node, **kwargs):
-        return Constant(-self.visit(node.operand).value, self.env)
+        return self.const_type(-self.visit(node.operand).value, self.env)
 
     def visit_Index(self, node, **kwargs):
         return self.visit(node.value).value
@@ -362,7 +378,7 @@ class ExprVisitor(BaseExprVisitor):
         value = self.visit(node.value)
         slobj = self.visit(node.slice)
         try:
-            return Constant(value[slobj], self.env)
+            return self.const_type(value[slobj], self.env)
         except TypeError:
             raise ValueError("cannot subscript {0!r} with "
                             "{1!r}".format(value, slobj))
@@ -486,7 +502,7 @@ class Expr(expr.Expr):
 
     def __unicode__(self):
         if self.terms is not None:
-            return unicode(self.terms)
+            return com.pprint_thing(self.terms)
         return self.expr
 
     def evaluate(self):

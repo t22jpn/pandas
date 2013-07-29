@@ -6,3 +6,7 @@ def _ensure_decoded(s):
     if isinstance(s, (np.bytes_, bytes)):
         s = s.decode('UTF-8')
     return s
+
+
+class NameResolutionError(NameError):
+    pass

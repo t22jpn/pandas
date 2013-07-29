@@ -278,6 +278,8 @@ def add_ops(op_classes):
 @disallow(_unsupported_nodes)
 @add_ops(_op_classes)
 class BaseExprVisitor(ast.NodeVisitor):
+    const_type = Constant
+    term_type = Term
 
     """Custom ast walker
     """
@@ -331,16 +333,17 @@ class BaseExprVisitor(ast.NodeVisitor):
         return op(operand)
 
     def visit_Name(self, node, **kwargs):
-        return Term(node.id, self.env)
+        return self.term_type(node.id, self.env, **kwargs)
 
     def visit_Num(self, node, **kwargs):
-        return Constant(node.n, self.env)
+        return self.const_type(node.n, self.env)
 
     def visit_Str(self, node, **kwargs):
-        return Constant(node.s, self.env)
+        return self.const_type(node.s, self.env)
 
     def visit_List(self, node, **kwargs):
-        return Constant([self.visit(e).value for e in node.elts], self.env)
+        return self.const_type([self.visit(e).value for e in node.elts],
+                               self.env)
 
     visit_Tuple = visit_List
 
@@ -365,7 +368,7 @@ class BaseExprVisitor(ast.NodeVisitor):
                           resolvers=self.env.resolvers)
             v = lhs[result]
         name = self.env.add_tmp(v)
-        return Term(name, env=self.env)
+        return self.term_type(name, env=self.env)
 
     def visit_Slice(self, node, **kwargs):
         """ df.index[slice(4,6)] """
@@ -397,7 +400,7 @@ class BaseExprVisitor(ast.NodeVisitor):
             try:
                 v = getattr(resolved, attr)
                 name = self.env.add_tmp(v)
-                return Term(name, self.env)
+                return self.term_type(name, self.env)
             except AttributeError:
                 # something like datetime.datetime where scope is overriden
                 if isinstance(value, ast.Name) and value.id == attr:
@@ -433,7 +436,7 @@ class BaseExprVisitor(ast.NodeVisitor):
         if node.kwargs is not None:
             keywords.update(self.visit(node.kwargs).value)
 
-        return Constant(res(*args, **keywords), self.env)
+        return self.const_type(res(*args, **keywords), self.env)
 
     def visit_Compare(self, node, **kwargs):
         ops = node.ops
