@@ -714,6 +714,12 @@ class TestOperations(unittest.TestCase):
                           '(df + 2)[df > 1] > 0 & (df > 0)',
                           local_dict={'df': df}, parser='python')
 
+    def test_python_fails_pipe(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(TypeError, pd.eval,
+                          '(df + 2)[df > 1] > 0 | (df > 0)',
+                          local_dict={'df': df}, parser='python')
+
     def check_failing_subscript_with_name_error(self, engine):
         df = DataFrame(np.random.randn(5, 3))
         self.assertRaises(NameError, pd.eval, 'df[x > 2] > 2',
@@ -797,6 +803,21 @@ class TestOperations(unittest.TestCase):
         for engine in _engines:
             self.check_nested_period_index_subscript_expression(engine)
 
+    def test_simple_not_expression(self):
+        df = DataFrame(randn(10, 3), columns=list('abc'))
+        df['bools'] = rand(len(df)) > 0.5
+        res = df['not bools']
+        res2 = df['~bools']
+        expec = df[~df.bools]
+        assert_frame_equal(res, expec)
+        assert_frame_equal(res2, expec)
+
+    def test_complex_boolean_expression(self):
+        df = DataFrame(randn(10, 3), columns=list('abc'))
+        df['bools'] = rand(len(df)) > 0.5
+        res = df['a < b < c and (not bools) or bools > 2']
+        expec = df[(df.a < df.b) & (df.b < df.c) & (~df.bools) | (df.bools > 2)]
+        assert_frame_equal(res, expec)
 
 _var_s = randn(10)
 

@@ -1045,9 +1045,7 @@ cleaner syntax
    map(lambda frame: frame.query(expr), [df, df2])
 
 One neat feature of :meth:`~pandas.DataFrame.query` is that you can pass an
-expression directly into the dunder (**d** ouble **under** score) method
-:meth:`~pandas.DataFrame.__getitem__` (:meth:`~pandas.DataFrame.__getitem__` is
-the method underlying subscripting syntax in Python).
+expression ``expr`` into ``df[]``, e.g., ``df[expr]``.
 
 This functionality can of course be combined with a slightly modified and more
 readable Python syntax implemented in the workhorse function that underlies
@@ -1077,7 +1075,36 @@ Pretty close to how you might write it on paper
 
    df['a < b < c']
 
-As you can see, these are all equivalent ways to express the same operation.
+As you can see, these are all equivalent ways to express the same operation (in
+fact, they are all ultimately parsed into something very similar to the first
+example of the indexing syntax above).
+
+You can also negate boolean expressions with the word ``not`` or the ``~``
+operator.
+
+.. ipython:: python
+
+   df = DataFrame(rand(n, 3), columns=list('abc'))
+   df['bools'] = rand(len(df)) > 0.5
+   df['~bools']
+   df['not bools']
+   df['not bools'] == df['~bools']
+   df['not bools'] == df[~df.bools]
+
+Of course, expressions can be arbitrarily complex too
+
+.. ipython:: python
+
+   # nice short query syntax
+   pretty = df['a < b < c and (not bools) or bools > 2']
+
+   # equivalent in pure Python, yuck!
+   yuck = df[(df.a < df.b) & (df.b < df.c) & (~df.bools) | (df.bools > 2)]
+
+   pretty
+   yuck
+
+   yuck == pretty
 
 .. _indexing.class:
 
