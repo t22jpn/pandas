@@ -73,7 +73,7 @@ class NumExprEngine(AbstractEngine):
 
         try:
             s = self.convert()
-            return ne.evaluate(s, local_dict=env.locals,
+            return ne.evaluate(str(s), local_dict=env.locals,
                                global_dict=env.globals,
                                truediv=self.expr.truediv)
         except KeyError as e:
