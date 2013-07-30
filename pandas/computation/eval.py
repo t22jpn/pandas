@@ -4,7 +4,8 @@ import numbers
 
 import numpy as np
 
-from pandas.computation.expr import Expr, _parsers, _ensure_scope
+from pandas.computation.expr import (Expr, _parsers, _ensure_scope,
+                                     _check_syntax)
 from pandas.computation.engines import _engines
 
 
@@ -94,6 +95,7 @@ def eval(expr, parser='pandas', engine='numexpr', truediv=True,
     # make sure we're passed a valid engine and parser
     _check_engine(engine)
     _check_parser(parser)
+    _check_syntax(expr)
 
     env = _ensure_scope(global_dict=global_dict, local_dict=local_dict,
                         resolvers=resolvers)

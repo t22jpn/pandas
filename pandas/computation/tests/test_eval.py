@@ -905,19 +905,26 @@ def test_invalid_parser():
                        parser='asdf')
 
 
-def check_is_expr(engine):
+def check_is_expr_syntax(engine):
     s = 1
-    valid = 's + 1'
-    invalid = 's +'
+    valid1 = 's + 1'
+    valid2 = '__y + _xx'
+    assert_true(expr.isexpr(valid1, check_names=False))
+    assert_true(expr.isexpr(valid2, check_names=False))
+
+
+def check_is_expr_names(engine):
+    r, s = 1, 2
+    valid = 's + r'
+    invalid = '__y + __x'
     assert_true(expr.isexpr(valid, check_names=True))
-    assert_true(expr.isexpr(valid, check_names=False))
-    assert_false(expr.isexpr(invalid, check_names=False))
     assert_false(expr.isexpr(invalid, check_names=True))
 
 
 def test_is_expr():
     for engine in _engines:
-        check_is_expr(engine)
+        check_is_expr_syntax(engine)
+        check_is_expr_names(engine)
 
 
 _parsers = {'python': PythonExprVisitor, 'pytables': pytables.ExprVisitor,
