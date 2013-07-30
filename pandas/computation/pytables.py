@@ -7,7 +7,7 @@ from functools import partial
 from datetime import datetime
 
 import pandas as pd
-from pandas.compat import u
+from pandas.compat import u, string_types
 import pandas.core.common as com
 from pandas.computation import expr, ops
 from pandas.computation.ops import is_term
@@ -176,13 +176,14 @@ class BinOp(ops.BinOp):
             v = float(v)
             return TermValue(v, v, kind)
         elif kind == u('bool'):
-            if isinstance(v, basestring):
-                v = not v.strip().lower() in [u('false'), u('f'), u('no'), u('n'),
-                                              u('none'), u('0'), u'[]', u'{}', u'']
+            if isinstance(v, string_types):
+                v = not v.strip().lower() in [u('false'), u('f'), u('no'),
+                                              u('n'), u('none'), u('0'),
+                                              u('[]'), u('{}'), u('')]
             else:
                 v = bool(v)
             return TermValue(v, v, kind)
-        elif not isinstance(v, basestring):
+        elif not isinstance(v, string_types):
             v = stringify(v)
             return TermValue(v, stringify(v), u('string'))
 
@@ -213,7 +214,7 @@ class FilterBinOp(BinOp):
 
     def evaluate(self):
 
-        if not isinstance(self.lhs, basestring):
+        if not isinstance(self.lhs, string_types):
             return self
 
         if not self.is_valid:
@@ -286,7 +287,7 @@ class ConditionBinOp(BinOp):
 
     def evaluate(self):
 
-        if not isinstance(self.lhs, basestring):
+        if not isinstance(self.lhs, string_types):
             return self
 
         if not self.is_valid:
@@ -475,7 +476,7 @@ class Expr(expr.Expr):
 
         if isinstance(w, dict):
             w, op, value = w.get('field'), w.get('op'), w.get('value')
-            if not isinstance(w, basestring):
+            if not isinstance(w, string_types):
                 raise TypeError(
                     "where must be passed as a string if op/value are passed")
             warnings.warn("passing a dict to Expr is deprecated, "
@@ -483,7 +484,7 @@ class Expr(expr.Expr):
                           DeprecationWarning)
 
         if op is not None:
-            if not isinstance(w, basestring):
+            if not isinstance(w, string_types):
                 raise TypeError(
                     "where must be passed as a string if op/value are passed")
 

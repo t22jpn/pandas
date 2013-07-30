@@ -17,7 +17,7 @@ from pandas.compat import(
 from pandas import compat
 
 from numpy import random, nan
-from numpy.random import randn
+from numpy.random import randn, rand
 import numpy as np
 import numpy.ma as ma
 from numpy.testing import assert_array_equal
@@ -10934,56 +10934,48 @@ starting,ending,measure
         with tm.assertRaises(TypeError):
             df.isin('aaa')
 
-class TestDataFrameQuery(unittest.TestCase):
-    def setUp(self):
-        self.frame = _frame.copy()
+def skip_if_no_ne(engine='numexpr'):
+    if engine == 'numexpr':
+        try:
+            import numexpr as ne
+        except ImportError:
+            raise nose.SkipTest("cannot query engine numexpr when numexpr not "
+                                "installed")
 
-    def tearDown(self):
-        del self.frame
 
-    def skip_no_ne(self, engine='numexpr'):
-        if engine == 'numexpr':
-            try:
-                import numexpr as ne
-            except ImportError:
-                raise nose.SkipTest("cannot query engine numexpr when numexpr not "
-                                    "installed")
+class TestDataFrameQueryNumExprPandas(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = 'numexpr'
+        cls.parser = 'pandas'
+        skip_if_no_ne(cls.engine)
+        cls.frame = _frame.copy()
 
-    def test_date_query_getitem(self):
-        self.skip_no_ne()
-        df = DataFrame(randn(5, 3))
-        df['dates1'] = date_range('1/1/2012', periods=5)
-        df['dates2'] = date_range('1/1/2013', periods=5)
-        df['dates3'] = date_range('1/1/2014', periods=5)
-        res = df['dates1 < 20130101 < dates3']
-        expec = df[(df.dates1 < '20130101') & ('20130101' < df.dates3)]
-        assert_frame_equal(res, expec)
-
-    def check_date_query_method(self, engine, parser):
-        self.skip_no_ne(engine)
-        df = DataFrame(randn(5, 3))
-        df['dates1'] = date_range('1/1/2012', periods=5)
-        df['dates2'] = date_range('1/1/2013', periods=5)
-        df['dates3'] = date_range('1/1/2014', periods=5)
-        res = df.query('dates1 < 20130101 < dates3', engine=engine)
-        expec = df[(df.dates1 < '20130101') & ('20130101' < df.dates3)]
-        assert_frame_equal(res, expec)
+    @classmethod
+    def tearDownClass(cls):
+        del cls.frame, cls.engine, cls.parser
 
     def test_date_query_method(self):
-        import itertools
-        for engine, parser in itertools.product(comp.engines._engines,
-                                                comp.expr._parsers):
-            self.check_date_query_method(engine, parser)
+        engine, parser = self.engine, self.parser
+        df = DataFrame(randn(5, 3))
+        df['dates1'] = date_range('1/1/2012', periods=5)
+        df['dates2'] = date_range('1/1/2013', periods=5)
+        df['dates3'] = date_range('1/1/2014', periods=5)
+        res = df.query('dates1 < 20130101 < dates3', engine=engine,
+                       parser=parser)
+        expec = df[(df.dates1 < '20130101') & ('20130101' < df.dates3)]
+        assert_frame_equal(res, expec)
 
-    def check_query_scope(self, engine, parser):
-        self.skip_no_ne(engine)
+    def test_query_scope(self):
+        engine, parser = self.engine, self.parser
         from pandas.computation.common import NameResolutionError
 
         df = DataFrame({"i": lrange(10),
                         "+": lrange(3, 13), "r": lrange(4, 14)})
         i, s = 5, 6
         self.assertRaises(NameResolutionError, df.query, 'i < 5',
-                          local_dict=locals(), global_dict=globals())
+                          local_dict=locals(), global_dict=globals(),
+                          engine=engine, parser=parser)
         self.assertRaises(IndentationError, df.query, ' i - +',
                           local_dict=locals(), global_dict=globals(),
                           engine=engine, parser=parser)
@@ -10998,55 +10990,8 @@ class TestDataFrameQuery(unittest.TestCase):
                           engine=engine, parser=parser, local_dict=locals(),
                           global_dict=globals())
 
-    def test_query_scope(self):
-        import itertools
-        for engine, parser in itertools.product(comp.engines._engines,
-                                                comp.expr._parsers):
-            self.check_query_scope(engine, parser)
-
-    def test_query_expressions_correct_failure(self):
-        self.skip_no_ne()
-        df = self.frame
-        exprs = 'and', 'or', 'not'
-        exprs += tuple(x + tm.rands(5) for x in exprs)
-        exprs += tuple(tm.rands(5) + x for x in exprs)
-
-        for e in exprs:
-            self.assertRaises(KeyError, df.__getitem__, e)
-
-        for e in (' and ', ' or ', ' not '):
-            self.assertRaises(SyntaxError, df.__getitem__, e)
-
-        x = tm.randbool(size=(self.frame.shape[0],))
-        self.assertRaises(KeyError, df.__getitem__, 'x')
-
-    def test_query_expressions(self):
-        self.skip_no_ne()
-        df = DataFrame(np.random.randn(10, 3), columns=['a', 'b', 'c'])
-        assert_frame_equal(df['a < b'], df[df.a < df.b])
-        assert_frame_equal(df['a + b > b * c'],
-                           df[df.a + df.b > df.b * df.c])
-
-    def test_query_expressions_with_index(self):
-        self.skip_no_ne()
-        df = DataFrame(np.random.randint(10, size=(10, 3)),
-                       index=Index(range(10), name='blob'),
-                       columns=['a', 'b', 'c'])
-        assert_frame_equal(df['index < b'], df[df.index < df.b])
-        assert_frame_equal(df['index < 5'], df[df.index < 5])
-        assert_frame_equal(df['(blob < 5) & (a < b)'],
-                           df[(df.index < 5) & (df.a < df.b)])
-        assert_frame_equal(df['blob < b'], df[df.index < df.b])
-
     def test_query(self):
-        import itertools
-        for engine, parser in itertools.product(comp.engines._engines,
-                                                comp.expr._parsers):
-            self.check_query(engine, parser)
-
-    def check_query(self, engine, parser):
-        self.skip_no_ne(engine)
-
+        engine, parser = self.engine, self.parser
         df = DataFrame(np.random.randn(10, 3), columns=['a', 'b', 'c'])
         assert_frame_equal(df.query('a < b', engine=engine, parser=parser), df[df.a < df.b])
         assert_frame_equal(df.query('a + b > b * c', engine=engine, parser=parser),
@@ -11063,14 +11008,7 @@ class TestDataFrameQuery(unittest.TestCase):
                           engine=engine, parser=parser)
 
     def test_query_index(self):
-        import itertools
-        for engine, parser in itertools.product(comp.engines._engines,
-                                                comp.expr._parsers):
-            self.check_query_index(engine, parser)
-
-    def check_query_index(self, engine, parser):
-        self.skip_no_ne(engine)
-
+        engine, parser = self.engine, self.parser
         df = DataFrame(np.random.randint(10, size=(10, 3)),
                        index=Index(range(10), name='blob'),
                        columns=['a', 'b', 'c'])
@@ -11084,24 +11022,154 @@ class TestDataFrameQuery(unittest.TestCase):
         assert_frame_equal(df.query('blob < b', engine=engine, parser=parser),
                            df[df.index < df.b])
 
-    def test_query_different_parsers(self):
-        for engine in comp.engines._engines:
-            self.check_query_different_parsers(engine)
+    def test_nested_scope(self):
+        engine = self.engine
+        parser = self.parser
+        # smoke test
+        x = 1
+        result = pd.eval('x + 1', engine=engine, parser=parser)
+        self.assertEqual(result, 2)
 
-    def check_query_different_parsers(self, engine):
-        self.skip_no_ne(engine)
-        df = DataFrame(np.random.randn(10, 3), columns=['a', 'b', 'c'])
-        assert_frame_equal(df.query('(a < 5) & (a < b)', parser='python',
-                                    engine=engine),
-                           df.query('a < 5 & a < b', parser='pandas',
-                                    engine=engine))
+        df  = DataFrame(np.random.randn(5, 3))
+        df2 = DataFrame(np.random.randn(5, 3))
+        expected = df[(df>0) & (df2>0)]
+
+        result = df.query('(df>0) & (df2>0)', engine=engine)
+        assert_frame_equal(result, expected)
+
+        result = pd.eval('df[(df > 0) and (df2 > 0)]', engine=engine)
+        assert_frame_equal(result, expected)
+
+        result = pd.eval('df[(df > 0) and (df2 > 0) and df[df > 0] > 0]',
+                         engine=engine)
+        expected = df[(df > 0) & (df2 > 0) & (df[df > 0] > 0)]
+        assert_frame_equal(result, expected)
+
+        result = pd.eval('df[(df>0) & (df2>0)]',engine=engine)
+        expected = df.query('(df>0) & (df2>0)', engine=engine)
+        assert_frame_equal(result, expected)
+
+
+class TestDataFrameQueryNumExprPython(TestDataFrameQueryNumExprPandas):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = 'numexpr'
+        cls.parser = 'python'
+        skip_if_no_ne(cls.engine)
+        cls.frame = _frame.copy()
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.frame, cls.engine, cls.parser
+
+    def test_date_query_method(self):
+        engine, parser = self.engine, self.parser
+        df = DataFrame(randn(5, 3))
+        df['dates1'] = date_range('1/1/2012', periods=5)
+        df['dates2'] = date_range('1/1/2013', periods=5)
+        df['dates3'] = date_range('1/1/2014', periods=5)
+        res = df.query('(df.dates1 < 20130101) & (20130101 < df.dates3)',
+                       engine=engine, parser=parser)
+        expec = df[(df.dates1 < '20130101') & ('20130101' < df.dates3)]
+        assert_frame_equal(res, expec)
+
+
+class TestDataFrameQueryPythonPandas(TestDataFrameQueryNumExprPandas):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = 'python'
+        cls.parser = 'pandas'
+        cls.frame = _frame.copy()
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.frame, cls.engine, cls.parser
+
+
+class TestDataFrameQueryPythonPython(TestDataFrameQueryNumExprPython):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = cls.parser = 'python'
+        cls.frame = _frame.copy()
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.frame, cls.engine, cls.parser
+
+
+class TestDataFrameQueryGetitem(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        skip_if_no_ne()
+        cls.frame = _frame.copy()
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.frame
+
+    def test_nested_scope(self):
+        df  = DataFrame(np.random.randn(5, 3))
+        df2 = DataFrame(np.random.randn(5, 3))
+        expected = df[(df>0) & (df2>0)]
+
+        result = df['(df>0) & (df2>0)']
+        assert_frame_equal(result, expected)
+
+    def test_date_query_getitem(self):
+        df = DataFrame(randn(5, 3))
+        df['dates1'] = date_range('1/1/2012', periods=5)
+        df['dates2'] = date_range('1/1/2013', periods=5)
+        df['dates3'] = date_range('1/1/2014', periods=5)
+        res = df['dates1 < 20130101 < dates3']
+        expec = df[(df.dates1 < '20130101') & ('20130101' < df.dates3)]
+        assert_frame_equal(res, expec)
+
+    def test_query_expressions_correct_failure(self):
+        df = self.frame
+        exprs = 'and', 'or', 'not'
+        exprs += tuple(x + tm.rands(5) for x in exprs)
+        exprs += tuple(tm.rands(5) + x for x in exprs)
+
+        for e in exprs:
+            self.assertRaises(KeyError, df.__getitem__, e)
+
+        for e in (' and ', ' or ', ' not '):
+            self.assertRaises(SyntaxError, df.__getitem__, e)
+
+        x = tm.randbool(size=(self.frame.shape[0],))
+        self.assertRaises(KeyError, df.__getitem__, 'x')
+
+    def test_query_expressions_with_index(self):
         df = DataFrame(np.random.randint(10, size=(10, 3)),
                        index=Index(range(10), name='blob'),
                        columns=['a', 'b', 'c'])
-        assert_frame_equal(df.query('(blob < 5) & (a < b)', parser='python',
-                                    engine=engine),
-                           df.query('blob < 5 & a < b', parser='pandas',
-                                    engine=engine))
+        assert_frame_equal(df['index < b'], df[df.index < df.b])
+        assert_frame_equal(df['index < 5'], df[df.index < 5])
+        assert_frame_equal(df['(blob < 5) & (a < b)'],
+                           df[(df.index < 5) & (df.a < df.b)])
+        assert_frame_equal(df['blob < b'], df[df.index < df.b])
+
+    def test_query_expressions(self):
+        df = DataFrame(np.random.randn(10, 3), columns=['a', 'b', 'c'])
+        assert_frame_equal(df['a < b'], df[df.a < df.b])
+        assert_frame_equal(df['a + b > b * c'],
+                           df[df.a + df.b > df.b * df.c])
+
+    def test_simple_not_expression(self):
+        df = DataFrame(randn(10, 3), columns=list('abc'))
+        df['bools'] = rand(len(df)) > 0.5
+        res = df['not bools']
+        res2 = df['~bools']
+        expec = df[~df.bools]
+        assert_frame_equal(res, expec)
+        assert_frame_equal(res2, expec)
+
+    def test_complex_boolean_expression(self):
+        df = DataFrame(randn(10, 3), columns=list('abc'))
+        df['bools'] = rand(len(df)) > 0.5
+        res = df['a < b < c and (not bools) or bools > 2']
+        expec = df[(df.a < df.b) & (df.b < df.c) & (~df.bools) | (df.bools > 2)]
+        assert_frame_equal(res, expec)
 
 
 if __name__ == '__main__':

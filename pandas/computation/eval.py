@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 import numbers
-
 import numpy as np
 
+from pandas import compat
+from pandas.compat import string_types
 from pandas.computation.expr import (Expr, _parsers, _ensure_scope,
                                      _check_syntax)
 from pandas.computation.engines import _engines
@@ -100,7 +101,7 @@ def eval(expr, parser='pandas', engine='numexpr', truediv=True,
     env = _ensure_scope(global_dict=global_dict, local_dict=local_dict,
                         resolvers=resolvers)
 
-    if isinstance(expr, basestring):
+    if isinstance(expr, string_types):
         parsed_expr = Expr(expr, engine=engine, parser=parser, env=env,
                            truediv=truediv)
     else:

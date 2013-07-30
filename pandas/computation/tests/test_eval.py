@@ -78,24 +78,22 @@ def skip_incompatible_operand(f):
 
 _good_arith_ops = com.difference(_arith_ops_syms, _special_case_arith_ops_syms)
 
-class TestEvalPandas(unittest.TestCase):
-
+class TestEvalNumexprPandas(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.cmp_ops = expr._cmp_ops_syms
-        cls.cmp2_ops = cls.cmp_ops[::-1]
-        cls.bin_ops = expr._bool_ops_syms
-        cls.special_case_ops = _special_case_arith_ops_syms
-        cls.arith_ops = _good_arith_ops
-        cls.unary_ops = '+', '-'
+        if not _USE_NUMEXPR:
+            raise nose.SkipTest("numexpr engine not installed")
+        else:
+            import numexpr as ne
+            cls.ne = ne
+        cls.engine = 'numexpr'
+        cls.parser = 'python'
 
     @classmethod
     def tearDownClass(cls):
-        del cls.cmp_ops, cls.cmp2_ops, cls.bin_ops, cls.special_case_ops
-        del cls.arith_ops, cls.unary_ops
-
-    def set_current_engine(self):
-        self.engine = 'numexpr'
+        del cls.engine, cls.parser
+        if hasattr(cls, 'ne'):
+            del cls.ne
 
     def setup_data(self):
         nan_df1 = DataFrame(rand(10, 5))
@@ -115,20 +113,22 @@ class TestEvalPandas(unittest.TestCase):
         self.rhses = self.pandas_rhses + self.scalar_rhses + (randn(10, 5),
                                                               randn(5))
 
+    def setup_ops(self):
+        self.cmp_ops = expr._cmp_ops_syms
+        self.cmp2_ops = self.cmp_ops[::-1]
+        self.bin_ops = expr._bool_ops_syms
+        self.special_case_ops = _special_case_arith_ops_syms
+        self.arith_ops = _good_arith_ops
+        self.unary_ops = '+', '-', '~', 'not '
+
     def setUp(self):
-        try:
-            import numexpr as ne
-            self.ne = ne
-        except ImportError:
-            raise nose.SkipTest
-        self.set_current_engine()
+        self.setup_ops()
         self.setup_data()
         self.current_engines = filter(lambda x: x != self.engine, _engines)
 
     def tearDown(self):
         del self.lhses, self.rhses, self.scalar_rhses, self.scalar_lhses
-        del self.pandas_rhses, self.pandas_lhses, self.current_engines, self.ne
-        del self.engine
+        del self.pandas_rhses, self.pandas_lhses, self.current_engines
 
     @slow
     def test_complex_cmp_ops(self):
@@ -377,10 +377,58 @@ class TestEvalPandas(unittest.TestCase):
         result = pd.eval(ex, engine=self.engine)
 
 
-class TestEvalPython(TestEvalPandas):
+class TestEvalNumexprPython(TestEvalNumexprPandas):
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import numexpr as ne
+            cls.ne = ne
+        except ImportError:
+            raise nose.SkipTest("numexpr not installed")
+        cls.engine = 'numexpr'
+        cls.parser = 'python'
 
-    def set_current_engine(self):
-        self.engine = 'python'
+    def setup_ops(self):
+        self.cmp_ops = expr._cmp_ops_syms
+        self.cmp2_ops = self.cmp_ops[::-1]
+        self.bin_ops = (s for s in expr._bool_ops_syms if s not in ('and', 'or'))
+        self.special_case_ops = _special_case_arith_ops_syms
+        self.arith_ops = _good_arith_ops
+        self.unary_ops = '+', '-', '~'
+
+
+class TestEvalPythonPython(TestEvalNumexprPython):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = 'python'
+        cls.parser = 'python'
+
+    @skip_incompatible_operand
+    def check_modulus(self, lhs, arith1, rhs):
+        ex = 'lhs {0} rhs'.format(arith1)
+        result = pd.eval(ex, engine=self.engine)
+        expected = lhs % rhs
+        assert_allclose(result, expected)
+        expected = eval('expected {0} rhs'.format(arith1))
+        assert_allclose(result, expected)
+
+    def check_alignment(self, result, nlhs, ghs, op):
+        try:
+            nlhs, ghs = nlhs.align(ghs)
+        except (ValueError, TypeError, AttributeError):
+            # ValueError: series frame or frame series align
+            # TypeError, AttributeError: series or frame with scalar align
+            pass
+        else:
+            expected = eval('nlhs {0} ghs'.format(op))
+            assert_array_equal(result, expected)
+
+
+class TestEvalPythonPandas(TestEvalPythonPython):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = 'python'
+        cls.parser = 'pandas'
 
 
 f = lambda *args, **kwargs: np.random.randn()
@@ -589,157 +637,111 @@ class TestAlignment(unittest.TestCase):
             pd.eval('df + s')
 
 
-class TestOperations(unittest.TestCase):
+#------------------------------------
+# slightly more complex ops
 
-    def check_simple_arith_ops(self, engine):
+class TestOperationsNumExprPandas(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not _USE_NUMEXPR:
+            raise nose.SkipTest("numexpr engine not installed")
+        cls.engine = 'numexpr'
+        cls.parser = 'pandas'
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.engine, cls.parser
+
+    def eval(self, *args, **kwargs):
+        kwargs['engine'] = self.engine
+        kwargs['parser'] = self.parser
+        return pd.eval(*args, **kwargs)
+
+    def test_simple_arith_ops(self):
         ops = expr._arith_ops_syms + expr._cmp_ops_syms
 
         for op in filter(lambda x: x != '//', ops):
-            expec = _eval_single_bin(1, op, 1, engine)
-            x = pd.eval('1 {0} 1'.format(op), engine=engine)
+            expec = _eval_single_bin(1, op, 1, self.engine)
+            x = self.eval('1 {0} 1'.format(op))
             assert_equal(x, expec)
 
-            expec = _eval_single_bin(x, op, 1, engine)
-            y = pd.eval('x {0} 1'.format(op), engine=engine)
+            expec = _eval_single_bin(x, op, 1, self.engine)
+            y = self.eval('x {0} 1'.format(op), local_dict={'x': x})
             assert_equal(y, expec)
 
-            expec = _eval_single_bin(1, op, x + 1, engine)
-            y = pd.eval('1 {0} (x + 1)'.format(op), engine=engine)
+            expec = _eval_single_bin(1, op, x + 1, self.engine)
+            y = self.eval('1 {0} (x + 1)'.format(op), local_dict={'x': x})
             assert_equal(y, expec)
 
-    def check_simple_bool_ops(self, engine):
+    def test_simple_bool_ops(self):
         for op, lhs, rhs in product(expr._bool_ops_syms, (True, False), (True,
                                                                         False)):
-            expec = _eval_single_bin(lhs, op, rhs, engine)
-            x = pd.eval('lhs {0} rhs'.format(op), engine=engine)
+            expec = _eval_single_bin(lhs, op, rhs, self.engine)
+            x = self.eval('lhs {0} rhs'.format(op), local_dict={'lhs': lhs,
+                                                                'rhs': rhs})
             assert_equal(x, expec)
 
-    def check_bool_ops_with_constants(self, engine):
+    def test_bool_ops_with_constants(self):
         asteval = ast.literal_eval
         for op, lhs, rhs in product(expr._bool_ops_syms, ('True', 'False'),
                                     ('True', 'False')):
-            expec = _eval_single_bin(asteval(lhs), op, asteval(rhs), engine)
-            x = pd.eval('{0} {1} {2}'.format(lhs, op, rhs), engine=engine)
+            expec = _eval_single_bin(asteval(lhs), op, asteval(rhs),
+                                     self.engine)
+            x = self.eval('{0} {1} {2}'.format(lhs, op, rhs),
+                          local_dict={'lhs': lhs, 'rhs': rhs})
             assert_equal(x, expec)
 
-    def test_simple_arith_ops(self):
-        for engine in _engines:
-            self.check_simple_arith_ops(engine)
-
-    def test_simple_bool_ops(self):
-        for engine in _engines:
-            self.check_simple_bool_ops(engine)
-
-    def test_bool_ops_with_constants(self):
-        for engine in _engines:
-            self.check_bool_ops_with_constants(engine)
-
-    def check_panel_fails(self, engine):
+    def test_panel_fails(self):
         x = Panel(randn(3, 4, 5))
         y = Series(randn(10))
-        assert_raises(NotImplementedError, pd.eval, 'x + y',
-                      local_dict={'x': x, 'y': y}, engine=engine)
-
-    def test_panel_fails(self):
-        for engine in _engines:
-            self.check_panel_fails(engine)
-
-    def check_4d_ndarray_fails(self, engine):
-        x = randn(3, 4, 5, 6)
-        y = Series(randn(10))
-        assert_raises(NotImplementedError, pd.eval, 'x + y', local_dict={'x': x,
-                                                                        'y': y},
-                    engine=engine)
+        assert_raises(NotImplementedError, self.eval, 'x + y',
+                      local_dict={'x': x, 'y': y})
 
     def test_4d_ndarray_fails(self):
-        for engine in _engines:
-            self.check_4d_ndarray_fails(engine)
-
-    def check_constant(self, engine):
-        x = pd.eval('1', engine=engine)
-        assert_equal(x, 1)
+        x = randn(3, 4, 5, 6)
+        y = Series(randn(10))
+        assert_raises(NotImplementedError, self.eval, 'x + y',
+                      local_dict={'x': x, 'y': y})
 
     def test_constant(self):
-        for engine in _engines:
-            self.check_constant(engine)
-
-    def check_single_variable(self, engine):
-        df = DataFrame(randn(10, 2))
-        df2 = pd.eval('df', engine=engine)
-        assert_frame_equal(df, df2)
+        x = self.eval('1')
+        assert_equal(x, 1)
 
     def test_single_variable(self):
-        for engine in _engines:
-            self.check_single_variable(engine)
+        df = DataFrame(randn(10, 2))
+        df2 = self.eval('df', local_dict={'df': df})
+        assert_frame_equal(df, df2)
 
     def test_truediv(self):
-        for engine in _engines:
-            self.check_truediv(engine)
-
-    def check_truediv(self, engine):
         s = np.array([1])
         ex = 's / 1'
+        d = {'s': s}
 
         if PY3:
-            res = pd.eval(ex, truediv=False)
+            res = self.eval(ex, truediv=False, local_dict=d)
             assert_array_equal(res, np.array([1.0]))
 
-            res = pd.eval(ex, truediv=True)
+            res = self.eval(ex, truediv=True, local_dict=d)
             assert_array_equal(res, np.array([1.0]))
         else:
-            res = pd.eval(ex, truediv=False)
+            res = self.eval(ex, truediv=False, local_dict=d)
             assert_array_equal(res, np.array([1]))
 
-            res = pd.eval(ex, truediv=True)
+            res = self.eval(ex, truediv=True, local_dict=d)
             assert_array_equal(res, np.array([1.0]))
 
-    def test_python_fails_and(self):
-        df = DataFrame(np.random.randn(5, 3))
-        self.assertRaises(NotImplementedError, pd.eval, 'df > 2 and df > 3',
-                          local_dict={'df': df}, parser='python')
-
-    def test_python_fails_or(self):
-        df = DataFrame(np.random.randn(5, 3))
-        self.assertRaises(NotImplementedError, pd.eval, 'df > 2 or df > 3',
-                          local_dict={'df': df}, parser='python')
-
-    def test_python_fails_not(self):
-        df = DataFrame(np.random.randn(5, 3))
-        self.assertRaises(NotImplementedError, pd.eval, 'not df > 2',
-                          local_dict={'df': df}, parser='python')
-
-    def test_python_fails_ampersand(self):
-        df = DataFrame(np.random.randn(5, 3))
-        self.assertRaises(TypeError, pd.eval,
-                          '(df + 2)[df > 1] > 0 & (df > 0)',
-                          local_dict={'df': df}, parser='python')
-
-    def test_python_fails_pipe(self):
-        df = DataFrame(np.random.randn(5, 3))
-        self.assertRaises(TypeError, pd.eval,
-                          '(df + 2)[df > 1] > 0 | (df > 0)',
-                          local_dict={'df': df}, parser='python')
-
-    def check_failing_subscript_with_name_error(self, engine):
-        df = DataFrame(np.random.randn(5, 3))
-        self.assertRaises(NameError, pd.eval, 'df[x > 2] > 2',
-                          local_dict={'df': df}, engine=engine)
-
     def test_failing_subscript_with_name_error(self):
-        for engine in _engines:
-            self.check_failing_subscript_with_name_error(engine)
-
-    def check_lhs_expression_subscript(self, engine):
         df = DataFrame(np.random.randn(5, 3))
-        result = pd.eval('(df + 1)[df > 2]', engine=engine)
+        self.assertRaises(NameError, self.eval, 'df[x > 2] > 2',
+                          local_dict={'df': df})
+
+    def test_lhs_expression_subscript(self):
+        df = DataFrame(np.random.randn(5, 3))
+        result = self.eval('(df + 1)[df > 2]', local_dict={'df': df})
         expected = (df + 1)[df > 2]
         assert_frame_equal(result, expected)
 
-    def test_lhs_expression_subscript(self):
-        for engine in _engines:
-            self.check_lhs_expression_subscript(engine)
-
-    def check_attr_expression(self, engine):
+    def test_attr_expression(self):
         df = DataFrame(np.random.randn(5, 3), columns=list('abc'))
         expr1 = 'df.a < df.b'
         expec1 = df.a < df.b
@@ -750,147 +752,202 @@ class TestOperations(unittest.TestCase):
         exprs = expr1, expr2, expr3
         expecs = expec1, expec2, expec3
         for e, expec in zip(exprs, expecs):
-            assert_series_equal(expec, pd.eval(e, engine=engine))
+            assert_series_equal(expec, self.eval(e, local_dict={'df': df}))
 
-    def test_attr_expression(self):
-        for engine in _engines:
-            self.check_attr_expression(engine)
-
-    def check_assignment_fails(self, engine, parser):
+    def test_assignment_fails(self):
         df = DataFrame(np.random.randn(5, 3), columns=list('abc'))
         df2 = DataFrame(np.random.randn(5, 3))
         expr1 = 'df = df2'
-        self.assertRaises(NotImplementedError, pd.eval, expr1,
-                          local_dict={'df': df, 'df2': df2}, engine=engine,
-                          parser=parser)
+        self.assertRaises(NotImplementedError, self.eval, expr1,
+                          local_dict={'df': df, 'df2': df2})
 
-    def test_assignment_fails(self):
-        for engine, parser in product(_engines.iterkeys(), ('pandas',
-                                                            'python')):
-            self.check_assignment_fails(engine, parser)
-
-    def check_basic_period_index_boolean_expression(self, engine):
+    def test_basic_period_index_boolean_expression(self):
         df = mkdf(2, 2, data_gen_f=f, c_idx_type='p', r_idx_type='i')
 
         e = df < 2
-        r = pd.eval('df < 2', engine=engine)
+        r = self.eval('df < 2', local_dict={'df': df})
         x = df < 2
 
         assert_frame_equal(r, e)
         assert_frame_equal(x, e)
 
-    def test_basic_period_index_expression_python(self):
-        for engine in _engines:
-            self.check_basic_period_index_boolean_expression(engine)
-
-    def check_basic_period_index_subscript_expression(self, engine):
+    def test_basic_period_index_subscript_expression(self):
         df = mkdf(2, 2, data_gen_f=f, c_idx_type='p', r_idx_type='i')
-        r = pd.eval('df[df < 2 + 3]', engine=engine)
+        r = self.eval('df[df < 2 + 3]', local_dict={'df': df})
         e = df[df < 2 + 3]
         assert_frame_equal(r, e)
 
-    def test_basic_period_index_subscript_expression(self):
-        for engine in _engines:
-            self.check_basic_period_index_subscript_expression(engine)
-
-    def check_nested_period_index_subscript_expression(self, engine):
+    def test_nested_period_index_subscript_expression(self):
         df = mkdf(2, 2, data_gen_f=f, c_idx_type='p', r_idx_type='i')
-        r = pd.eval('df[df[df < 2] < 2] + df * 2', engine=engine)
+        r = self.eval('df[df[df < 2] < 2] + df * 2', local_dict={'df': df})
         e = df[df[df < 2] < 2] + df * 2
         assert_frame_equal(r, e)
-
-    def test_nested_period_index_subscript_expression(self):
-        for engine in _engines:
-            self.check_nested_period_index_subscript_expression(engine)
-
-    def test_simple_not_expression(self):
-        df = DataFrame(randn(10, 3), columns=list('abc'))
-        df['bools'] = rand(len(df)) > 0.5
-        res = df['not bools']
-        res2 = df['~bools']
-        expec = df[~df.bools]
-        assert_frame_equal(res, expec)
-        assert_frame_equal(res2, expec)
-
-    def test_complex_boolean_expression(self):
-        df = DataFrame(randn(10, 3), columns=list('abc'))
-        df['bools'] = rand(len(df)) > 0.5
-        res = df['a < b < c and (not bools) or bools > 2']
-        expec = df[(df.a < df.b) & (df.b < df.c) & (~df.bools) | (df.bools > 2)]
-        assert_frame_equal(res, expec)
 
     def test_date_boolean(self):
         df = DataFrame(randn(5, 3))
         df['dates1'] = date_range('1/1/2012', periods=5)
-        res = pd.eval('df.dates1 < 20130101')
+        res = self.eval('df.dates1 < 20130101', local_dict={'df': df})
         expec = df.dates1 < '20130101'
         assert_series_equal(res, expec)
 
+
+class TestOperationsNumExprPython(TestOperationsNumExprPandas):
+    @classmethod
+    def setUpClass(cls):
+        if not _USE_NUMEXPR:
+            raise nose.SkipTest("numexpr engine not installed")
+        cls.engine = 'numexpr'
+        cls.parser = 'python'
+
+    def test_fails_and(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(NotImplementedError, pd.eval, 'df > 2 and df > 3',
+                          local_dict={'df': df}, parser=self.parser,
+                          engine=self.engine)
+
+    def test_fails_or(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(NotImplementedError, pd.eval, 'df > 2 or df > 3',
+                          local_dict={'df': df}, parser=self.parser,
+                          engine=self.engine)
+
+    def test_fails_not(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(NotImplementedError, pd.eval, 'not df > 2',
+                          local_dict={'df': df}, parser=self.parser,
+                          engine=self.engine)
+
+    def test_fails_ampersand(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(TypeError, pd.eval,
+                          '(df + 2)[df > 1] > 0 & (df > 0)',
+                          local_dict={'df': df}, parser=self.parser,
+                          engine=self.engine)
+
+    def test_fails_pipe(self):
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(TypeError, pd.eval,
+                          '(df + 2)[df > 1] > 0 | (df > 0)',
+                          local_dict={'df': df}, parser=self.parser,
+                          engine=self.engine)
+
+    def test_bool_ops_with_constants(self):
+        from ast import literal_eval as asteval
+        for op, lhs, rhs in product(expr._bool_ops_syms, ('True', 'False'),
+                                    ('True', 'False')):
+            if op not in ('and', 'or'):
+                expec = _eval_single_bin(asteval(lhs), op, asteval(rhs),
+                                        self.engine)
+                x = self.eval('{0} {1} {2}'.format(lhs, op, rhs),
+                            local_dict={'lhs': lhs, 'rhs': rhs})
+                assert_equal(x, expec)
+            else:
+                self.assertRaises(NotImplementedError,
+                                  self.eval,
+                                  '{0} {1} {2}'.format(lhs, op, rhs),
+                                  local_dict={'lhs': lhs, 'rhs': rhs})
+
+    def test_simple_bool_ops(self):
+        for op, lhs, rhs in product(expr._bool_ops_syms, (True, False), (True,
+                                                                        False)):
+            if op not in ('and', 'or'):
+                expec = _eval_single_bin(lhs, op, rhs, self.engine)
+                x = self.eval('lhs {0} rhs'.format(op), local_dict={'lhs': lhs,
+                                                                    'rhs': rhs})
+                assert_equal(x, expec)
+            else:
+                self.assertRaises(NotImplementedError,
+                                  self.eval,
+                                  'lhs {0} rhs'.format(op),
+                                  local_dict={'lhs': lhs, 'rhs': rhs})
+
+
+class TestOperationsPythonPython(TestOperationsNumExprPython):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = cls.parser = 'python'
+
+    def test_fails_ampersand(self):
+        raise nose.SkipTest("known failer for now")
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(TypeError, pd.eval,
+                          '(df + 2)[df > 1] > 0 & (df > 0)',
+                          local_dict={'df': df}, parser=self.parser,
+                          engine=self.engine)
+
+    def test_fails_pipe(self):
+        raise nose.SkipTest("known failer for now")
+        df = DataFrame(np.random.randn(5, 3))
+        self.assertRaises(TypeError, pd.eval,
+                          '(df + 2)[df > 1] > 0 | (df > 0)',
+                          local_dict={'df': df}, parser=self.parser,
+                          engine=self.engine)
+
+
+class TestOperationsPythonPandas(TestOperationsNumExprPandas):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = 'python'
+        cls.parser = 'pandas'
+
+
 _var_s = randn(10)
 
-class TestScope(unittest.TestCase):
+class TestScopeNumexprPandas(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not _USE_NUMEXPR:
+            raise nose.SkipTest("numexpr engine not installed")
+        cls.engine = 'numexpr'
+        cls.parser = 'pandas'
 
-    def check_global_scope(self, engine):
-        e = '_var_s * 2'
-        assert_array_equal(_var_s * 2, pd.eval(e, engine=engine))
+    @classmethod
+    def tearDownClass(cls):
+        del cls.engine, cls.parser
 
     def test_global_scope(self):
-        for engine in _engines:
-            self.check_global_scope(engine)
+        e = '_var_s * 2'
+        assert_array_equal(_var_s * 2, pd.eval(e, engine=self.engine,
+                                               parser=self.parser))
 
-    def check_no_new_locals(self, engine):
+    def test_no_new_locals(self):
         x = 1
         lcls = locals().copy()
-        pd.eval('x + 1', local_dict=lcls)
+        pd.eval('x + 1', local_dict=lcls, engine=self.engine,
+                parser=self.parser)
         lcls2 = locals().copy()
         lcls2.pop('lcls')
         assert_equal(lcls, lcls2)
 
-    def test_no_new_locals(self):
-        for engine in _engines:
-            self.check_no_new_locals(engine)
-
-    def check_no_new_globals(self, engine):
+    def test_no_new_globals(self):
         x = 1
         gbls = globals().copy()
-        pd.eval('x + 1')
+        pd.eval('x + 1', engine=self.engine, parser=self.parser)
         gbls2 = globals().copy()
         assert_equal(gbls, gbls2)
 
-    def test_no_new_globals(self):
-        for engine in _engines:
-            self.check_no_new_globals(engine)
 
-    def check_nested_scope(self, engine):
-        # smoke test
-        x = 1
-        result = pd.eval('x + 1', engine=engine)
-        self.assertEqual(result, 2)
+class TestScopeNumexprPython(TestScopeNumexprPandas):
+    @classmethod
+    def setUpClass(cls):
+        if not _USE_NUMEXPR:
+            raise nose.SkipTest("numexpr engine not installed")
+        cls.engine = 'numexpr'
+        cls.parser = 'pandas'
 
-        df  = DataFrame(np.random.randn(5, 3))
-        df2 = DataFrame(np.random.randn(5, 3))
-        expected = df[(df>0) & (df2>0)]
 
-        result = df['(df>0) & (df2>0)']
-        assert_frame_equal(result, expected)
+class TestScopePythonPandas(TestScopeNumexprPandas):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = 'numexpr'
+        cls.parser = 'pandas'
 
-        result = df.query('(df>0) & (df2>0)', engine=engine)
-        assert_frame_equal(result, expected)
 
-        result = pd.eval('df[(df > 0) and (df2 > 0)]', engine=engine)
-        assert_frame_equal(result, expected)
-
-        result = pd.eval('df[(df > 0) and (df2 > 0) and df[df > 0] > 0]', engine=engine)
-        expected = df[(df > 0) & (df2 > 0) & (df[df > 0] > 0)]
-        assert_frame_equal(result, expected)
-
-        result = pd.eval('df[(df>0) & (df2>0)]',engine=engine)
-        expected = df.query('(df>0) & (df2>0)', engine=engine)
-        assert_frame_equal(result, expected)
-
-    def test_nested_scope(self):
-        for engine in _engines:
-            self.check_nested_scope(engine)
+class TestScopePythonPython(TestScopeNumexprPandas):
+    @classmethod
+    def setUpClass(cls):
+        cls.engine = 'numexpr'
+        cls.parser = 'pandas'
 
 
 def test_invalid_engine():

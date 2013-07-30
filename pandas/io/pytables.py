@@ -29,7 +29,7 @@ from pandas.core.index import _ensure_index
 import pandas.core.common as com
 from pandas.tools.merge import concat
 from pandas import compat
-from pandas.compat import u, PY3
+from pandas.compat import u, PY3, range
 from pandas.io.common import PerformanceWarning
 from pandas.core.config import get_option
 from pandas.computation.pytables import Expr
@@ -2415,7 +2415,7 @@ class SparsePanelFixed(GenericFixed):
         self.attrs.default_kind = obj.default_kind
         self.write_index('items', obj.items)
 
-        for name, sdf in obj.iterkv():
+        for name, sdf in compat.iteritems(obj):
             key = 'sparse_frame_%s' % name
             if key not in self.group._v_children:
                 node = self._handle.createGroup(self.group, key)
@@ -2464,7 +2464,7 @@ class BlockManagerFixed(GenericFixed):
         self.validate_read(kwargs)
 
         axes = []
-        for i in xrange(self.ndim):
+        for i in range(self.ndim):
             ax = self.read_index('axis%d' % i)
             axes.append(ax)
 

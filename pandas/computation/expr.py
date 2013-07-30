@@ -9,7 +9,7 @@ from functools import partial
 
 import pandas as pd
 from pandas import compat
-from pandas.compat import StringIO, zip
+from pandas.compat import StringIO, zip, reduce, string_types
 from pandas.core.base import StringMixin
 from pandas.core import common as com
 from pandas.computation.common import NameResolutionError
@@ -315,7 +315,7 @@ class BaseExprVisitor(ast.NodeVisitor):
 
     def visit(self, node, **kwargs):
         parse = ast.parse
-        if isinstance(node, basestring):
+        if isinstance(node, string_types):
             clean = self.preparser(node)
         elif isinstance(node, ast.AST):
             clean = node
@@ -549,7 +549,7 @@ _needs_filter = frozenset(['and', 'or', 'not'])
 
 def maybe_expression(s, kind='pandas'):
     """ loose checking if s is an expression """
-    if not isinstance(s, basestring):
+    if not isinstance(s, string_types):
         return False
     visitor = _parsers[kind]
     ops = visitor.binary_ops + visitor.unary_ops

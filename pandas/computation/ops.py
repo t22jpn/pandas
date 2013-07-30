@@ -4,7 +4,8 @@ from functools import partial
 import numpy as np
 
 import pandas as pd
-from pandas.compat import PY3
+from pandas import compat
+from pandas.compat import PY3, string_types
 import pandas.core.common as com
 from pandas.core.base import StringMixin
 from pandas.computation.common import _ensure_decoded
@@ -49,7 +50,7 @@ class Term(StringMixin):
         self.update(res)
 
         if res is None:
-            if not isinstance(key, basestring):
+            if not isinstance(key, string_types):
                 return key
             raise NameError('name {0!r} is not defined'.format(key))
 
@@ -61,7 +62,7 @@ class Term(StringMixin):
     def update(self, value):
         env = self.env
         key = self.name
-        if isinstance(key, basestring):
+        if isinstance(key, string_types):
             try:
                 del env.locals[key]
                 env.locals[key] = value
