@@ -221,11 +221,16 @@ def _reconstruct_object(typ, obj, axes, dtype):
     except AttributeError:
         pass
 
+    try:
+        res_t = np.result_type(obj.dtype, dtype)
+    except AttributeError:
+        res_t = dtype
+
     if (not isinstance(typ, partial) and
         issubclass(typ, pd.core.generic.PandasObject)):
-        return typ(obj, dtype=dtype, **axes)
+        return typ(obj, dtype=res_t, **axes)
 
-    ret_value = typ(obj).astype(dtype)
+    ret_value = typ(obj).astype(res_t)
 
     try:
         ret = ret_value.item()

@@ -11034,19 +11034,20 @@ class TestDataFrameQueryNumExprPandas(unittest.TestCase):
         df2 = DataFrame(np.random.randn(5, 3))
         expected = df[(df>0) & (df2>0)]
 
-        result = df.query('(df>0) & (df2>0)', engine=engine)
+        result = df.query('(df>0) & (df2>0)', engine=engine, parser=parser)
         assert_frame_equal(result, expected)
 
-        result = pd.eval('df[(df > 0) and (df2 > 0)]', engine=engine)
+        result = pd.eval('df[(df > 0) and (df2 > 0)]', engine=engine,
+                         parser=parser)
         assert_frame_equal(result, expected)
 
         result = pd.eval('df[(df > 0) and (df2 > 0) and df[df > 0] > 0]',
-                         engine=engine)
+                         engine=engine, parser=parser)
         expected = df[(df > 0) & (df2 > 0) & (df[df > 0] > 0)]
         assert_frame_equal(result, expected)
 
-        result = pd.eval('df[(df>0) & (df2>0)]',engine=engine)
-        expected = df.query('(df>0) & (df2>0)', engine=engine)
+        result = pd.eval('df[(df>0) & (df2>0)]', engine=engine, parser=parser)
+        expected = df.query('(df>0) & (df2>0)', engine=engine, parser=parser)
         assert_frame_equal(result, expected)
 
 
@@ -11072,6 +11073,34 @@ class TestDataFrameQueryNumExprPython(TestDataFrameQueryNumExprPandas):
                        engine=engine, parser=parser)
         expec = df[(df.dates1 < '20130101') & ('20130101' < df.dates3)]
         assert_frame_equal(res, expec)
+
+    def test_nested_scope(self):
+        engine = self.engine
+        parser = self.parser
+        # smoke test
+        x = 1
+        result = pd.eval('x + 1', engine=engine, parser=parser)
+        self.assertEqual(result, 2)
+
+        df  = DataFrame(np.random.randn(5, 3))
+        df2 = DataFrame(np.random.randn(5, 3))
+        expected = df[(df>0) & (df2>0)]
+
+        result = df.query('(df>0) & (df2>0)', engine=engine, parser=parser)
+        assert_frame_equal(result, expected)
+
+        result = pd.eval('df[(df > 0) & (df2 > 0)]', engine=engine,
+                         parser=parser)
+        assert_frame_equal(result, expected)
+
+        result = pd.eval('df[(df > 0) & (df2 > 0) & (df[df > 0] > 0)]',
+                         engine=engine, parser=parser)
+        expected = df[(df > 0) & (df2 > 0) & (df[df > 0] > 0)]
+        assert_frame_equal(result, expected)
+
+        result = pd.eval('df[(df>0) & (df2>0)]', engine=engine, parser=parser)
+        expected = df.query('(df>0) & (df2>0)', engine=engine, parser=parser)
+        assert_frame_equal(result, expected)
 
 
 class TestDataFrameQueryPythonPandas(TestDataFrameQueryNumExprPandas):

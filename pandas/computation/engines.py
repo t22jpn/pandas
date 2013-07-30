@@ -91,7 +91,7 @@ class PythonEngine(AbstractEngine):
         super(PythonEngine, self).__init__(expr)
 
     def evaluate(self):
-        return self.expr(self.expr.env)
+        return self.expr()
 
     def _evaluate(self, env):
         pass

@@ -355,8 +355,8 @@ class ExprVisitor(BaseExprVisitor):
     const_type = Constant
     term_type = Term
 
-    def __init__(self, env, **kwargs):
-        super(ExprVisitor, self).__init__(env)
+    def __init__(self, env, engine, parser, **kwargs):
+        super(ExprVisitor, self).__init__(env, engine, parser)
         for bin_op in self.binary_ops:
             setattr(self, 'visit_{0}'.format(self.binary_op_nodes_map[bin_op]),
                     lambda node, bin_op=bin_op: partial(BinOp, bin_op,
@@ -468,6 +468,7 @@ class Expr(expr.Expr):
         if queryables is not None:
             self.env.queryables.update(queryables)
             self._visitor = ExprVisitor(self.env, queryables=queryables,
+                                        parser='pytables', engine='pytables',
                                         encoding=encoding)
             self.terms = self.parse()
 

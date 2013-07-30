@@ -4,7 +4,6 @@ from functools import partial
 import numpy as np
 
 import pandas as pd
-from pandas import compat
 from pandas.compat import PY3, string_types
 import pandas.core.common as com
 from pandas.core.base import StringMixin
@@ -219,16 +218,11 @@ for d in (_cmp_ops_dict, _bool_ops_dict, _arith_ops_dict):
 def _cast_inplace(terms, dtype):
     dt = np.dtype(dtype)
     for term in terms:
-        # cast all the way down the tree since operands must be
         try:
-            _cast_inplace(term.operands, dtype)
+            new_value = term.value.astype(dt)
         except AttributeError:
-            # we've bottomed out so actually do the cast
-            try:
-                new_value = term.value.astype(dt)
-            except AttributeError:
-                new_value = dt.type(term.value)
-            term.update(new_value)
+            new_value = dt.type(term.value)
+        term.update(new_value)
 
 
 def is_term(obj):
@@ -325,10 +319,11 @@ class BinOp(Op):
             self.lhs.update(v)
 
 
-class Mod(BinOp):
-    def __init__(self, lhs, rhs, *args, **kwargs):
-        super(Mod, self).__init__('%', lhs, rhs, *args, **kwargs)
-        _cast_inplace(self.operands, np.float_)
+class Div(BinOp):
+    def __init__(self, lhs, rhs, truediv=True, *args, **kwargs):
+        super(Div, self).__init__('/', lhs, rhs, *args, **kwargs)
+        if truediv or PY3:
+            _cast_inplace(com.flatten(self), np.float_)
 
 
 _unary_ops_syms = '+', '-', '~', 'not'
