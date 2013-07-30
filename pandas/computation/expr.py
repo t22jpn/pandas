@@ -2,16 +2,17 @@ import ast
 import operator
 import sys
 import inspect
-import itertools
 import tokenize
 import datetime
 
-from cStringIO import StringIO
 from functools import partial
 
 import pandas as pd
+from pandas import compat
+from pandas.compat import StringIO, zip
 from pandas.core.base import StringMixin
 from pandas.core import common as com
+from pandas.computation.common import NameResolutionError
 from pandas.computation.ops import (_cmp_ops_syms, _bool_ops_syms,
                                     _arith_ops_syms, _unary_ops_syms)
 from pandas.computation.ops import _reductions, _mathops
@@ -22,6 +23,18 @@ def _ensure_scope(level=2, global_dict=None, local_dict=None, resolvers=None,
                   **kwargs):
     """ ensure that we are grabbing the correct scope """
     return Scope(global_dict, local_dict, level=level, resolvers=resolvers)
+
+
+def _check_disjoint_resolver_names(resolver_keys, local_keys, global_keys):
+    res_locals = com.intersection(resolver_keys, local_keys)
+    if res_locals:
+        msg = "resolvers and locals overlap on names {0}".format(res_locals)
+        raise NameResolutionError(msg)
+
+    res_globals = com.intersection(resolver_keys, global_keys)
+    if res_globals:
+        msg = "resolvers and globals overlap on names {0}".format(res_globals)
+        raise NameResolutionError(msg)
 
 
 class Scope(StringMixin):
@@ -75,10 +88,13 @@ class Scope(StringMixin):
         self.globals['True'] = True
         self.globals['False'] = False
 
+
         self.resolver_keys = frozenset(reduce(operator.add, (list(o.keys()) for
                                                              o in
                                                              self.resolvers),
                                               []))
+        _check_disjoint_resolver_names(self.resolver_keys, self.locals,
+                                       self.globals)
         self._global_resolvers = self.resolvers + (self.locals, self.globals)
         self._resolver = None
 
@@ -265,7 +281,7 @@ _op_classes = {'binary': BinOp, 'unary': UnaryOp}
 
 def add_ops(op_classes):
     def f(cls):
-        for op_attr_name, op_class in op_classes.iteritems():
+        for op_attr_name, op_class in compat.iteritems(op_classes):
             ops = getattr(cls, '{0}_ops'.format(op_attr_name))
             ops_map = getattr(cls, '{0}_op_nodes_map'.format(op_attr_name))
             for op in ops:
@@ -287,11 +303,11 @@ class BaseExprVisitor(ast.NodeVisitor):
     binary_op_nodes = ('Gt', 'Lt', 'GtE', 'LtE', 'Eq', 'NotEq', 'BitAnd',
                        'BitOr', 'And', 'Or', 'Add', 'Sub', 'Mult', 'Div',
                        'Pow', 'FloorDiv', 'Mod')
-    binary_op_nodes_map = dict(itertools.izip(binary_ops, binary_op_nodes))
+    binary_op_nodes_map = dict(zip(binary_ops, binary_op_nodes))
 
     unary_ops = _unary_ops_syms
     unary_op_nodes = 'UAdd', 'USub', 'Invert', 'Not'
-    unary_op_nodes_map = dict(itertools.izip(unary_ops, unary_op_nodes))
+    unary_op_nodes_map = dict(zip(unary_ops, unary_op_nodes))
 
     def __init__(self, env, preparser=_preparse):
         self.env = env
@@ -452,7 +468,7 @@ class BaseExprVisitor(ast.NodeVisitor):
                                                  self.visit(comps[0], side='right'))
         left = node.left
         values = []
-        for op, comp in itertools.izip(ops, comps):
+        for op, comp in zip(ops, comps):
             new_node = self.visit(ast.Compare(comparators=[comp], left=left,
                                               ops=[translate(op)]))
             left = comp
@@ -544,15 +560,17 @@ def maybe_expression(s, kind='pandas'):
 
 
 def isexpr(s, check_names=True):
-    env = _ensure_scope()
     try:
-        Expr(s,env=env)
+        Expr(s, env=_ensure_scope() if check_names else None)
     except SyntaxError:
         return False
     except NameError:
         return not check_names
-    else:
-        return True
+    return True
+
+
+def _check_syntax(s):
+    ast.parse(s)
 
 
 _parsers = {'python': PythonExprVisitor, 'pandas': PandasExprVisitor}

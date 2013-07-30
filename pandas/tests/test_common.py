@@ -4,12 +4,11 @@ import unittest
 
 import nose
 from nose.tools import assert_equal
-import unittest
 import numpy as np
 from pandas.tslib import iNaT
 
-from pandas import Series, DataFrame, date_range, DatetimeIndex, Timestamp
-import pandas.compat as compat
+from pandas import (Series, DataFrame, date_range, DatetimeIndex, Timestamp,
+                    Panel)
 from pandas.compat import range, long, lrange, lmap, u
 from pandas.core.common import notnull, isnull
 import pandas.compat as compat
@@ -17,10 +16,7 @@ import pandas.core.common as com
 import pandas.util.testing as tm
 import pandas.core.config as cf
 
-import numpy as np
 from numpy.random import randn
-
-from pandas.tslib import iNaT
 
 _multiprocess_can_split_ = True
 

@@ -7,6 +7,7 @@ from functools import partial
 from datetime import datetime
 
 import pandas as pd
+from pandas.compat import u
 import pandas.core.common as com
 from pandas.computation import expr, ops
 from pandas.computation.ops import is_term
@@ -157,7 +158,7 @@ class BinOp(ops.BinOp):
             return encoder(value)
 
         kind = _ensure_decoded(self.kind)
-        if kind == u'datetime64' or kind == u'datetime':
+        if kind == u('datetime64') or kind == u('datetime'):
             if isinstance(v, (int, float)):
                 v = stringify(v)
             v = _ensure_decoded(v)
@@ -165,28 +166,28 @@ class BinOp(ops.BinOp):
             if v.tz is not None:
                 v = v.tz_convert('UTC')
             return TermValue(v, v.value, kind)
-        elif isinstance(v, datetime) or hasattr(v, 'timetuple') or kind == u'date':
+        elif isinstance(v, datetime) or hasattr(v, 'timetuple') or kind == u('date'):
             v = time.mktime(v.timetuple())
             return TermValue(v, pd.Timestamp(v), kind)
-        elif kind == u'integer':
+        elif kind == u('integer'):
             v = int(float(v))
             return TermValue(v, v, kind)
-        elif kind == u'float':
+        elif kind == u('float'):
             v = float(v)
             return TermValue(v, v, kind)
-        elif kind == u'bool':
+        elif kind == u('bool'):
             if isinstance(v, basestring):
-                v = not v.strip().lower() in [u'false', u'f', u'no', u'n',
-                                              u'none', u'0', u'[]', u'{}', u'']
+                v = not v.strip().lower() in [u('false'), u('f'), u('no'), u('n'),
+                                              u('none'), u('0'), u'[]', u'{}', u'']
             else:
                 v = bool(v)
             return TermValue(v, v, kind)
         elif not isinstance(v, basestring):
             v = stringify(v)
-            return TermValue(v, stringify(v), u'string')
+            return TermValue(v, stringify(v), u('string'))
 
         # string quoting
-        return TermValue(v, stringify(v), u'string')
+        return TermValue(v, stringify(v), u('string'))
 
     def convert_values(self):
         pass
@@ -534,7 +535,7 @@ class TermValue(object):
     def tostring(self, encoding):
         """ quote the string if not encoded
             else encode and return """
-        if self.kind == u'string':
+        if self.kind == u('string'):
             if encoding is not None:
                 return self.converted
             return '"%s"' % self.converted

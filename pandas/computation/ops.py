@@ -4,7 +4,7 @@ from functools import partial
 import numpy as np
 
 import pandas as pd
-from pandas.util.py3compat import PY3
+from pandas.compat import PY3
 import pandas.core.common as com
 from pandas.core.base import StringMixin
 from pandas.computation.common import _ensure_decoded

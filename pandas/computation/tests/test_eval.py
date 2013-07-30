@@ -29,7 +29,7 @@ from pandas.computation.expressions import _USE_NUMEXPR
 from pandas.util.testing import (assert_frame_equal, randbool,
                                  assertRaisesRegexp,
                                  assert_produces_warning, assert_series_equal)
-from pandas.util.py3compat import PY3
+from pandas.compat import PY3
 
 
 def skip_numexpr_engine(engine):
