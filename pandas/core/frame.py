@@ -36,8 +36,7 @@ from pandas.core.series import Series, _radd_compat
 from pandas.sparse.array import SparseArray
 import pandas.computation.expressions as expressions
 from pandas.computation.eval import eval as _eval
-from pandas.computation.expr import (maybe_expression, _ensure_scope,
-                                     _check_syntax)
+from pandas.computation.expr import maybe_expression, _ensure_scope
 from pandas.compat.scipy import scoreatpercentile as _quantile
 from pandas.compat import(range, zip, lrange, lmap, lzip, StringIO, u,
                           OrderedDict, raise_with_traceback)
@@ -1954,7 +1953,6 @@ class DataFrame(NDFrame):
         --------
         pandas.eval
         """
-        _check_syntax(expr)
         resolvers = kwargs.pop('resolvers', None)
         if resolvers is None:
             index_resolvers = {}

@@ -80,6 +80,11 @@ def skip_incompatible_operand(f):
     return wrapper
 
 
+def _is_py3_complex_incompat(result, expected):
+    return (PY3 and isinstance(expected, (complex, np.complexfloating)) and
+            np.isnan(result))
+
+
 _good_arith_ops = com.difference(_arith_ops_syms, _special_case_arith_ops_syms)
 
 class TestEvalNumexprPandas(unittest.TestCase):
@@ -322,13 +327,19 @@ class TestEvalNumexprPandas(unittest.TestCase):
         ex = 'lhs {0} rhs'.format(arith1)
         expected = self.get_expected_pow_result(lhs, rhs)
         result = pd.eval(ex, engine=self.engine, parser=self.parser)
-        assert_array_equal(result, expected)
 
-        ex = '(lhs {0} rhs) {0} rhs'.format(arith1)
-        result = pd.eval(ex, engine=self.engine, parser=self.parser)
-        expected = self.get_expected_pow_result(
-            self.get_expected_pow_result(lhs, rhs), rhs)
-        assert_array_equal(result, expected)
+        if (np.isscalar(lhs) and np.isscalar(rhs) and
+            _is_py3_complex_incompat(result, expected)):
+            self.assertRaises(AssertionError, assert_array_equal, result,
+                              expected)
+        else:
+            assert_array_equal(result, expected)
+
+            ex = '(lhs {0} rhs) {0} rhs'.format(arith1)
+            result = pd.eval(ex, engine=self.engine, parser=self.parser)
+            expected = self.get_expected_pow_result(
+                self.get_expected_pow_result(lhs, rhs), rhs)
+            assert_array_equal(result, expected)
 
     @skip_incompatible_operand
     def check_single_invert_op(self, lhs, cmp1, rhs):
@@ -702,7 +713,6 @@ class TestAlignment(object):
         with assert_produces_warning(False):
             pd.eval('df + s', engine=engine, parser=parser)
 
-    @slow
     def test_performance_warning_for_asenine_alignment(self):
         for engine, parser in ENGINES_PARSERS:
             yield self.check_performance_warning_for_asenine_alignment, engine, parser

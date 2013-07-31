@@ -243,6 +243,21 @@ def notnull(obj):
 
 
 def flatten(l):
+    """Flatten an arbitrarily nested sequence.
+
+    Parameters
+    ----------
+    l : sequence
+        The non string sequence to flatten
+
+    Notes
+    -----
+    This doesn't consider strings sequences.
+
+    Returns
+    -------
+    flattened : generator
+    """
     for el in l:
         if isinstance(el, collections.Iterable) and not is_string(el):
             for s in flatten(el):

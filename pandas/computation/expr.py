@@ -379,19 +379,15 @@ class BaseExprVisitor(ast.NodeVisitor):
         value = self.visit(node.value)
         slobj = self.visit(node.slice)
         expr = com.pprint_thing(slobj)
-        result = pd.eval(expr, local_dict=self.env.locals,
-                         global_dict=self.env.globals,
-                         resolvers=self.env.resolvers, engine=self.engine,
+        result = pd.eval(expr, local_dict=self.env, engine=self.engine,
                          parser=self.parser)
         try:
             # a Term instance
             v = value.value[result]
         except AttributeError:
             # an Op instance
-            lhs = pd.eval(com.pprint_thing(value), local_dict=self.env.locals,
-                          global_dict=self.env.globals,
-                          resolvers=self.env.resolvers, engine=self.engine,
-                          parser=self.parser)
+            lhs = pd.eval(com.pprint_thing(value), local_dict=self.env,
+                          engine=self.engine, parser=self.parser)
             v = lhs[result]
         name = self.env.add_tmp(v)
         return self.term_type(name, env=self.env)

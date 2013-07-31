@@ -10976,10 +10976,7 @@ class TestDataFrameQueryNumExprPandas(unittest.TestCase):
         self.assertRaises(NameResolutionError, df.query, 'i < 5',
                           local_dict=locals(), global_dict=globals(),
                           engine=engine, parser=parser)
-        self.assertRaises(IndentationError, df.query, ' i - +',
-                          local_dict=locals(), global_dict=globals(),
-                          engine=engine, parser=parser)
-        self.assertRaises(SyntaxError, df.query, 'i - +', engine=engine,
+        self.assertRaises(NameResolutionError, df.query, 'i - +', engine=engine,
                           local_dict=locals(), global_dict=globals(),
                           parser=parser)
         self.assertRaises(NameResolutionError, df.query, 'i == s',
