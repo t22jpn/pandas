@@ -1953,6 +1953,20 @@ class DataFrame(NDFrame):
         --------
         pandas.eval
         """
+        # need to go up at least 4 stack frames
+        # 4 expr.Scope
+        # 3 expr._ensure_scope
+        # 2 self.eval
+        # 1 self.query
+        # 0 self.query caller (implicit)
+        level = kwargs.setdefault('level', 4)
+        if level < 4:
+            raise ValueError("Going up fewer than 4 stack frames will not"
+                             " capture the necessary variable scope for a "
+                             "query expression")
+        return self[self.eval(expr, **kwargs)]
+
+    def eval(self, expr, **kwargs):
         resolvers = kwargs.pop('resolvers', None)
         if resolvers is None:
             index_resolvers = {}
@@ -1962,7 +1976,7 @@ class DataFrame(NDFrame):
                                     'columns': self.columns})
             resolvers = [self, index_resolvers]
         kwargs['local_dict'] = _ensure_scope(resolvers=resolvers, **kwargs)
-        return self[_eval(expr, **kwargs)]
+        return _eval(expr, **kwargs)
 
     def _slice(self, slobj, axis=0, raise_on_error=False):
         axis = self._get_block_manager_axis(axis)

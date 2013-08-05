@@ -572,9 +572,9 @@ class Expr(StringMixin):
     def check_name_clashes(self):
         env = self.env
         names = self.names
-        res_keys = frozenset(env.resolver_dict.iterkeys()) & names
-        lcl_keys = frozenset(env.locals.iterkeys()) & names
-        gbl_keys = frozenset(env.globals.iterkeys()) & names
+        res_keys = frozenset(env.resolver_dict.keys()) & names
+        lcl_keys = frozenset(env.locals.keys()) & names
+        gbl_keys = frozenset(env.globals.keys()) & names
         _check_disjoint_resolver_names(res_keys, lcl_keys, gbl_keys)
 
     def add_resolvers_to_locals(self):

@@ -47,12 +47,12 @@ def eval(expr, parser='pandas', engine='numexpr', truediv=True,
     ----------
     expr : string
         The expression to evaluate.
-    parser : string, optional, default 'pandas', {'pandas', 'python'}
+    parser : string, default 'pandas', {'pandas', 'python'}
         The parser to use to construct the syntax tree from the expression. The
         default of 'pandas' parses code slightly different than standard
         Python. See the :ref:`enhancing performance <enhancingperf.eval>`
         documentation for more details.
-    engine : string, optional, default 'numexpr', {'python', 'numexpr'}
+    engine : string, default 'numexpr', {'python', 'numexpr'}
 
         The engine used to evaluate the expression. Supported engines are
 
@@ -62,11 +62,11 @@ def eval(expr, parser='pandas', engine='numexpr', truediv=True,
         - ``'python'``: Performs operations as if you had ``eval``'d in top
                         level python. This engine is generally not that useful.
 
-    truediv : bool, optional, default True
+    truediv : bool, default True
         Whether to use true division, like in Python >= 3
-    local_dict : dict or None, optional, default None
+    local_dict : dict or None, default None
         A dictionary of local variables, taken from locals() by default.
-    global_dict : dict or None, optional, default None
+    global_dict : dict or None, default None
         A dictionary of global variables, taken from globals() by default.
     resolvers : dict of dict-like or None, default None
         A dictionary of dict-like object (specifically they must implement the
@@ -76,7 +76,7 @@ def eval(expr, parser='pandas', engine='numexpr', truediv=True,
         :attr:`~pandas.DataFrame.index` and :attr:`~pandas.DataFrame.columns`
         variables that refer to their respective :class:`~pandas.DataFrame`
         instance attributes.
-    level : int, optional, default 2
+    level : int, default 2
         The number of prior stack frames to traverse and add to the current
         scope.
 

@@ -61,7 +61,9 @@ def _ensure_encoding(encoding):
             encoding = _default_encoding
     return encoding
 
+
 Term = Expr
+
 
 def _ensure_term(where):
     """ ensure that the where is a Term or a list of Term
@@ -70,12 +72,13 @@ def _ensure_term(where):
 
     # create the terms here with a frame_level=2 (we are 2 levels down)
     if isinstance(where, (list, tuple)):
-        where = [ w if isinstance(w, Term) else Term(w, scope_level=2) for w in where if w is not None ]
-    elif where is None or isinstance(where, Coordinates):
-        pass
-    elif not isinstance(where, Term):
+        where = [w if isinstance(w, Term) else Term(w, scope_level=2)
+                 for w in where if w is not None]
+    elif (not isinstance(where, Term) and where is not None and
+            not isinstance(where, Coordinates)):
         where = Term(where, scope_level=2)
     return where
+
 
 class PossibleDataLossError(Exception):
     pass
