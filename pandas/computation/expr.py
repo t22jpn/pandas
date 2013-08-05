@@ -14,8 +14,8 @@ from pandas.core.base import StringMixin
 from pandas.core import common as com
 from pandas.computation.common import NameResolutionError
 from pandas.computation.ops import (_cmp_ops_syms, _bool_ops_syms,
-                                    _arith_ops_syms, _unary_ops_syms)
-from pandas.computation.ops import _reductions, _mathops
+                                    _arith_ops_syms, _unary_ops_syms, is_term)
+from pandas.computation.ops import _reductions, _mathops, _LOCAL_TAG
 from pandas.computation.ops import BinOp, UnaryOp, Term, Constant, Div
 
 
@@ -93,10 +93,10 @@ class Scope(StringMixin):
                                                              o in
                                                              self.resolvers),
                                               []))
-        _check_disjoint_resolver_names(self.resolver_keys, self.locals,
-                                       self.globals)
         self._global_resolvers = self.resolvers + (self.locals, self.globals)
         self._resolver = None
+        self.resolver_dict = dict((k, self.resolve(k))
+                                  for k in self.resolver_keys)
 
     def __unicode__(self):
         return com.pprint_thing("locals: {0}\nglobals: {0}\nresolvers: "
@@ -105,20 +105,18 @@ class Scope(StringMixin):
                                              self.resolver_keys))
 
     def __getitem__(self, key):
-        return self.resolver(key)
+        return self.resolve(key, globally=False)
 
-    @property
-    def resolver(self):
-        if self._resolver is None:
-            def resolve_key(key):
-                for resolver in self._global_resolvers:
-                    try:
-                        return resolver[key]
-                    except KeyError:
-                        pass
-            self._resolver = resolve_key
+    def resolve(self, key, globally=False):
+        resolvers = self.locals, self.globals
+        if globally:
+            resolvers = self._global_resolvers
 
-        return self._resolver
+        for resolver in resolvers:
+            try:
+                return resolver[key]
+            except KeyError:
+                pass
 
     def update(self, level=None):
         """Update the current scope by going back `level` levels.
@@ -192,6 +190,10 @@ def _rewrite_assign(source):
 
 def _replace_booleans(source):
     return source.replace('|', ' or ').replace('&', ' and ')
+
+
+def _replace_locals(source, local_symbol='@'):
+    return source.replace(local_symbol, _LOCAL_TAG)
 
 
 def _preparse(source):
@@ -508,7 +510,8 @@ _numexpr_supported_calls = frozenset(_reductions + _mathops)
 @disallow((_unsupported_nodes | _python_not_supported) -
           (_boolop_nodes | frozenset(['BoolOp', 'Attribute'])))
 class PandasExprVisitor(BaseExprVisitor):
-    def __init__(self, env, engine, parser, preparser=_replace_booleans):
+    def __init__(self, env, engine, parser,
+                 preparser=lambda x: _replace_locals(_replace_booleans(x))):
         super(PandasExprVisitor, self).__init__(env, engine, parser, preparser)
 
 
@@ -520,13 +523,21 @@ class PythonExprVisitor(BaseExprVisitor):
 
 
 class Expr(StringMixin):
+    """Expr object holding scope
 
-    """Expr object"""
-
+    Parameters
+    ----------
+    expr : str
+    engine : str, optional, default 'numexpr'
+    parser : str, optional, default 'pandas'
+    env : Scope, optional, default None
+    truediv : bool, optional, default True
+    level : int, optional, default 2
+    """
     def __init__(self, expr, engine='numexpr', parser='pandas', env=None,
-                 truediv=True):
+                 truediv=True, level=2):
         self.expr = expr
-        self.env = _ensure_scope(level=2,local_dict=env)
+        self.env = _ensure_scope(level=level, local_dict=env)
         self.engine = engine
         self.parser = parser
         self._visitor = _parsers[parser](self.env, self.engine, self.parser)
@@ -544,12 +555,30 @@ class Expr(StringMixin):
         return len(self.expr)
 
     def parse(self):
-        """return a Termset"""
+        """Parse an expression"""
         return self._visitor.visit(self.expr)
 
     def align(self):
         """align a set of Terms"""
         return self.terms.align(self.env)
+
+    @property
+    def names(self):
+        """Get the names in an expression"""
+        if is_term(self.terms):
+            return frozenset([self.terms.name])
+        return frozenset(term.name for term in com.flatten(self.terms))
+
+    def check_name_clashes(self):
+        env = self.env
+        names = self.names
+        res_keys = frozenset(env.resolver_dict.iterkeys()) & names
+        lcl_keys = frozenset(env.locals.iterkeys()) & names
+        gbl_keys = frozenset(env.globals.iterkeys()) & names
+        _check_disjoint_resolver_names(res_keys, lcl_keys, gbl_keys)
+
+    def add_resolvers_to_locals(self):
+        self.env.locals.update(self.env.resolver_dict)
 
 
 _needs_filter = frozenset(['and', 'or', 'not'])
