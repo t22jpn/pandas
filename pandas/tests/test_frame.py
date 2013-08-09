@@ -9,6 +9,7 @@ import re
 import csv
 import unittest
 import nose
+from itertools import product
 
 from pandas.compat import(
     map, zip, range, long, lrange, lmap, lzip,
@@ -10951,6 +10952,11 @@ def skip_if_no_ne(engine='numexpr'):
                                 "installed")
 
 
+def skip_if_no_pandas_parser(parser):
+    if parser != 'pandas':
+        raise nose.SkipTest("cannot evaluate with parser {0!r}".format(parser))
+
+
 class TestDataFrameQueryNumExprPandas(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -10978,23 +10984,21 @@ class TestDataFrameQueryNumExprPandas(unittest.TestCase):
         engine, parser = self.engine, self.parser
         from pandas.computation.common import NameResolutionError
 
-        df = DataFrame({"i": lrange(10),
-                        "+": lrange(3, 13), "r": lrange(4, 14)})
+        df = DataFrame({"i": lrange(10), "+": lrange(3, 13),
+                        "r": lrange(4, 14)})
         i, s = 5, 6
         self.assertRaises(NameResolutionError, df.query, 'i < 5',
-                          engine=engine, parser=parser)
+                          engine=engine, parser=parser, local_dict={'i': i})
         self.assertRaises(SyntaxError, df.query, 'i - +', engine=engine,
                           parser=parser)
         self.assertRaises(NameResolutionError, df.query, 'i == s',
-                          engine=engine, parser=parser)
+                          engine=engine, parser=parser, local_dict={'i': i,
+                                                                    's': s})
         from numpy import sin
         df.index.name = 'sin'
-        if engine == 'python':
-            raised = KeyError  # no column named True
-        else:
-            raised = TypeError  # numexpr cannot compare types
-        self.assertRaises(raised, df.query, 'sin > 5', engine=engine,
-                          parser=parser)
+        self.assertRaises(NameResolutionError, df.query, 'sin > 5',
+                          engine=engine, parser=parser, local_dict={'sin':
+                                                                    sin})
 
     def test_query(self):
         engine, parser = self.engine, self.parser
@@ -11057,24 +11061,26 @@ class TestDataFrameQueryNumExprPandas(unittest.TestCase):
         assert_frame_equal(result, expected)
 
     def test_local_syntax(self):
-        skip_if_no_ne()
+        skip_if_no_pandas_parser(self.parser)
+
         from pandas.computation.common import NameResolutionError
+
         engine, parser = self.engine, self.parser
-        df = DataFrame(randn(1000, 10), columns=list('abcdefghij'))
+        df = DataFrame(randn(100, 10), columns=list('abcdefghij'))
         b = 1
         expect = df[df.a < b]
-        result = df['a < @b']
+        result = df.query('a < @b', engine=engine, parser=parser)
         assert_frame_equal(result, expect)
 
         # scope issue with self.assertRaises so just catch it and let it pass
         try:
-            df['a < b']
+            df.query('a < @b', engine=engine, parser=parser)
         except NameResolutionError:
             pass
 
         del b
         expect = df[df.a < df.b]
-        result = df['a < b']
+        result = df.query('a < b', engine=engine, parser=parser)
         assert_frame_equal(result, expect)
 
 
@@ -11226,6 +11232,25 @@ class TestDataFrameQueryGetitem(unittest.TestCase):
         res = df['a < b < c and (not bools) or bools > 2']
         expec = df[(df.a < df.b) & (df.b < df.c) & (~df.bools) | (df.bools > 2)]
         assert_frame_equal(res, expec)
+
+    def test_local_syntax(self):
+        from pandas.computation.common import NameResolutionError
+        df = DataFrame(randn(1000, 10), columns=list('abcdefghij'))
+        b = 1
+        expect = df[df.a < b]
+        result = df['a < @b']
+        assert_frame_equal(result, expect)
+
+        # scope issue with self.assertRaises so just catch it and let it pass
+        try:
+            df['a < b']
+        except NameResolutionError:
+            pass
+
+        del b
+        expect = df[df.a < df.b]
+        result = df['a < b']
+        assert_frame_equal(result, expect)
 
 
 class TestDataFrameEvalNumExprPandas(unittest.TestCase):
