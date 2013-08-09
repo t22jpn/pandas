@@ -172,7 +172,9 @@ class Scope(StringMixin):
             raise TypeError("Cannot add value to object of type {0!r}, "
                             "scope must be a dictionary"
                             "".format(d.__class__.__name__))
-        name = 'tmp_var_{0}_{1}'.format(self.ntemps, pd.util.testing.rands(10))
+        name = 'tmp_var_{0}_{1}_{2}'.format(value.__class__.__name__,
+                                            self.ntemps,
+                                            pd.util.testing.rands(10))
         d[name] = value
 
         # only increment if the variable gets put in the scope
@@ -366,8 +368,8 @@ class BaseExprVisitor(ast.NodeVisitor):
         return self.term_type(name, self.env)
 
     def visit_List(self, node, **kwargs):
-        return self.const_type([self.visit(e).value for e in node.elts],
-                               self.env)
+        name = self.env.add_tmp([self.visit(e).value for e in node.elts])
+        return self.term_type(name, self.env)
 
     visit_Tuple = visit_List
 

@@ -10989,8 +10989,12 @@ class TestDataFrameQueryNumExprPandas(unittest.TestCase):
                           engine=engine, parser=parser)
         from numpy import sin
         df.index.name = 'sin'
-        self.assertRaises(NameResolutionError, df.query, 'sin > 5',
-                          engine=engine, parser=parser)
+        if engine == 'python':
+            raised = KeyError  # no column named True
+        else:
+            raised = TypeError  # numexpr cannot compare types
+        self.assertRaises(raised, df.query, 'sin > 5', engine=engine,
+                          parser=parser)
 
     def test_query(self):
         engine, parser = self.engine, self.parser
