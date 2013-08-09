@@ -449,7 +449,7 @@ class Expr(expr.Expr):
         if isinstance(where, Expr):
 
             lcls.update(where.env.locals)
-            where = str(where)
+            where = where.expr
 
         elif isinstance(where, (list, tuple)):
 
@@ -465,7 +465,7 @@ class Expr(expr.Expr):
         self.env = Scope(lcls=lcls)
         self.env.update(scope_level)
 
-        if queryables is not None:
+        if queryables is not None and isinstance(self.expr, string_types):
             self.env.queryables.update(queryables)
             self._visitor = ExprVisitor(self.env, queryables=queryables,
                                         parser='pytables', engine='pytables',
@@ -506,7 +506,7 @@ class Expr(expr.Expr):
     def __unicode__(self):
         if self.terms is not None:
             return com.pprint_thing(self.terms)
-        return self.expr
+        return com.pprint_thing(self.expr)
 
     def evaluate(self):
         """ create and return the numexpr condition and filter """
@@ -542,3 +542,15 @@ class TermValue(object):
                 return self.converted
             return '"%s"' % self.converted
         return self.converted
+
+
+def maybe_expression(s):
+    """ loose checking if s is a pytables-acceptable expression """
+    if not isinstance(s, string_types):
+        return False
+    ops = ExprVisitor.binary_ops + ExprVisitor.unary_ops + ('=',)
+
+    # make sure we have an op at least
+    return any(op in s for op in ops)
+
+

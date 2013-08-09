@@ -11276,7 +11276,6 @@ class TestDataFrameEvalNumExprPandas(unittest.TestCase):
         assert_series_equal(res, expect)
 
     def test_bool_arith_expr(self):
-        # failing bc of nested scope issue here
         res = self.frame.eval('a[a < 1] + b', engine=self.engine,
                               parser=self.parser)
         expect = self.frame.a[self.frame.a < 1] + self.frame.b

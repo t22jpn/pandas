@@ -33,7 +33,6 @@ from pandas.core.internals import (BlockManager,
                                    create_block_manager_from_arrays,
                                    create_block_manager_from_blocks)
 from pandas.core.series import Series, _radd_compat
-from pandas.sparse.array import SparseArray
 import pandas.computation.expressions as expressions
 from pandas.computation.eval import eval as _eval
 from pandas.computation.expr import maybe_expression, _ensure_scope
@@ -51,13 +50,12 @@ import pandas.core.algorithms as algos
 import pandas.core.datetools as datetools
 import pandas.core.common as com
 import pandas.core.format as fmt
-import pandas.core.generic as generic
 import pandas.core.nanops as nanops
 
 import pandas.lib as lib
 import pandas.algos as _algos
 
-from pandas.core.config import get_option, set_option
+from pandas.core.config import get_option
 
 #----------------------------------------------------------------------
 # Docstring templates

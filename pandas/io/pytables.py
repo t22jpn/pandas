@@ -32,7 +32,7 @@ from pandas import compat
 from pandas.compat import u, PY3, range
 from pandas.io.common import PerformanceWarning
 from pandas.core.config import get_option
-from pandas.computation.pytables import Expr
+from pandas.computation.pytables import Expr, maybe_expression
 
 import pandas.lib as lib
 import pandas.algos as algos
@@ -66,16 +66,18 @@ Term = Expr
 
 
 def _ensure_term(where):
-    """ ensure that the where is a Term or a list of Term
-        this makes sure that we are capturing the scope of variables
-        that are passed """
+    """
+    ensure that the where is a Term or a list of Term
+    this makes sure that we are capturing the scope of variables
+    that are passed
+    create the terms here with a frame_level=2 (we are 2 levels down)
+    """
 
-    # create the terms here with a frame_level=2 (we are 2 levels down)
-    if isinstance(where, (list, tuple)):
-        where = [w if isinstance(w, Term) else Term(w, scope_level=2)
-                 for w in where if w is not None]
-    elif (not isinstance(where, Term) and where is not None and
-            not isinstance(where, Coordinates)):
+    # only consider list/tuple here as an ndarray is automaticaly a coordinate list
+    if isinstance(where, (list,tuple)):
+        where = [w if not maybe_expression(w) else Term(w, scope_level=2)
+                 for w in where if w is not None ]
+    elif maybe_expression(where):
         where = Term(where, scope_level=2)
     return where
 
