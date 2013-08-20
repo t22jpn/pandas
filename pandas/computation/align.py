@@ -11,7 +11,7 @@ from pandas.computation.ops import is_const
 
 
 def _align_core_single_unary_op(term):
-    if isinstance(term.value, np.ndarray) and not com.is_series(term.value):
+    if isinstance(term.value, np.ndarray):
         typ = partial(np.asanyarray, dtype=term.value.dtype)
     else:
         typ = type(term.value)

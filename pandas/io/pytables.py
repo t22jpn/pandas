@@ -29,7 +29,7 @@ from pandas.core.index import _ensure_index
 import pandas.core.common as com
 from pandas.tools.merge import concat
 from pandas import compat
-from pandas.compat import u, PY3, range
+from pandas.compat import u, PY3, range, lrange
 from pandas.io.common import PerformanceWarning
 from pandas.core.config import get_option
 from pandas.computation.pytables import Expr, maybe_expression
@@ -3497,7 +3497,7 @@ class AppendableTable(LegacyTable):
             # we must remove in reverse order!
             pg = groups.pop()
             for g in reversed(groups):
-                rows = l.take(range(g, pg))
+                rows = l.take(lrange(g, pg))
                 table.removeRows(start=rows[rows.index[0]
                                             ], stop=rows[rows.index[-1]] + 1)
                 pg = g

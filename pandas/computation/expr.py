@@ -26,12 +26,12 @@ def _ensure_scope(level=2, global_dict=None, local_dict=None, resolvers=None,
 
 
 def _check_disjoint_resolver_names(resolver_keys, local_keys, global_keys):
-    res_locals = com.intersection(resolver_keys, local_keys)
+    res_locals = list(com.intersection(resolver_keys, local_keys))
     if res_locals:
         msg = "resolvers and locals overlap on names {0}".format(res_locals)
         raise NameResolutionError(msg)
 
-    res_globals = com.intersection(resolver_keys, global_keys)
+    res_globals = list(com.intersection(resolver_keys, global_keys))
     if res_globals:
         msg = "resolvers and globals overlap on names {0}".format(res_globals)
         raise NameResolutionError(msg)
