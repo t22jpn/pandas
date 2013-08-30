@@ -11170,9 +11170,9 @@ class TestDataFrameQueryGetitem(unittest.TestCase):
         del cls.frame
 
     def test_nested_scope(self):
-        df  = DataFrame(np.random.randn(5, 3))
+        df = DataFrame(np.random.randn(5, 3))
         df2 = DataFrame(np.random.randn(5, 3))
-        expected = df[(df>0) & (df2>0)]
+        expected = df[(df > 0) & (df2 > 0)]
 
         result = df['(df>0) & (df2>0)']
         assert_frame_equal(result, expected)
@@ -11251,6 +11251,52 @@ class TestDataFrameQueryGetitem(unittest.TestCase):
         expect = df[df.a < df.b]
         result = df['a < b']
         assert_frame_equal(result, expect)
+
+
+PARSERS = 'python', 'pandas'
+ENGINES = 'python', 'numexpr'
+
+
+class TestDataFrameQueryStrings(object):
+    def check_str_query_method(self, parser, engine):
+        skip_if_no_ne(engine)
+        df = DataFrame(randn(10, 1), columns=['b'])
+        df['strings'] = Series(list('aabbccddee'))
+        expect = df[df.strings == 'a']
+        res = df.query('strings == "a"', engine=engine, parser=parser)
+        assert_frame_equal(res, expect)
+
+    def test_str_query_method(self):
+        for parser, engine in product(PARSERS, ENGINES):
+            yield self.check_str_query_method, parser, engine
+
+    def test_str_list_query_method(self):
+        for parser, engine in product(PARSERS, ENGINES):
+            yield self.check_str_list_query_method, parser, engine
+
+    def check_str_list_query_method(self, parser, engine):
+        skip_if_no_ne(engine)
+        df = DataFrame(randn(10, 1), columns=['b'])
+        df['strings'] = Series(list('aabbccddee'))
+        expect = df[df.strings.isin(['a', 'b'])]
+        res = df.query('strings == ["a", "b"]', engine=engine, parser=parser)
+        assert_frame_equal(res, expect)
+
+    def test_str_query(self):
+        skip_if_no_ne()
+        df = DataFrame(randn(10, 1), columns=['b'])
+        df['strings'] = Series(list('aabbccddee'))
+        expect = df[df.strings == 'a']
+        res = df['strings == "a"']
+        assert_frame_equal(res, expect)
+
+    def test_str_list_query(self):
+        skip_if_no_ne()
+        df = DataFrame(randn(10, 1), columns=['b'])
+        df['strings'] = Series(list('aabbccddee'))
+        expect = df[df.strings.isin(['a', 'b'])]
+        res = df['strings == ["a", "b"]']
+        assert_frame_equal(res, expect)
 
 
 class TestDataFrameEvalNumExprPandas(unittest.TestCase):

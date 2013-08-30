@@ -3,10 +3,8 @@
 import numbers
 import numpy as np
 
-from pandas import compat
 from pandas.compat import string_types
-from pandas.computation.expr import (Expr, _parsers, _ensure_scope,
-                                     _check_syntax)
+from pandas.computation.expr import Expr, _parsers, _ensure_scope
 from pandas.computation.engines import _engines
 
 
@@ -112,7 +110,8 @@ def eval(expr, parser='pandas', engine='numexpr', truediv=True,
 
     # construct the engine and evaluate
     eng = _engines[engine]
-    ret = eng(parsed_expr).evaluate()
+    eng_inst = eng(parsed_expr)
+    ret = eng_inst.evaluate()
 
     # sanity check for a number if it's a scalar result
     # TODO: eventually take out

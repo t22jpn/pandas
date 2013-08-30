@@ -18,14 +18,15 @@ import pandas as pd
 from pandas.core import common as com
 from pandas import DataFrame, Series, Panel, date_range
 from pandas.util.testing import makeCustomDataframe as mkdf
+
+from pandas.computation import pytables
+from pandas.computation.expressions import _USE_NUMEXPR
 from pandas.computation.engines import _engines
 from pandas.computation.expr import PythonExprVisitor, PandasExprVisitor
 from pandas.computation.ops import (_binary_ops_dict, _unary_ops_dict,
                                     _special_case_arith_ops_syms,
                                     _arith_ops_syms)
 import pandas.computation.expr as expr
-from pandas.computation import pytables
-from pandas.computation.expressions import _USE_NUMEXPR
 from pandas.util.testing import (assert_frame_equal, randbool,
                                  assertRaisesRegexp,
                                  assert_produces_warning, assert_series_equal)
@@ -59,9 +60,9 @@ def _eval_single_bin(lhs, cmp1, rhs, engine):
 
 
 def _series_and_2d_ndarray(lhs, rhs):
-    return ((com.is_series(lhs) and
+    return ((isinstance(lhs, Series) and
              isinstance(rhs, np.ndarray) and rhs.ndim > 1)
-            or (com.is_series(rhs) and
+            or (isinstance(rhs, Series) and
                 isinstance(lhs, np.ndarray) and lhs.ndim > 1))
 
 
@@ -87,6 +88,7 @@ def _is_py3_complex_incompat(result, expected):
 
 
 _good_arith_ops = com.difference(_arith_ops_syms, _special_case_arith_ops_syms)
+
 
 class TestEvalNumexprPandas(unittest.TestCase):
     @classmethod
@@ -116,10 +118,8 @@ class TestEvalNumexprPandas(unittest.TestCase):
         self.scalar_lhses = randn(), np.float64(randn()), np.nan
         self.scalar_rhses = randn(), np.float64(randn()), np.nan
 
-        self.lhses = self.pandas_lhses + self.scalar_lhses + (randn(10, 5),
-                                                              randn(5))
-        self.rhses = self.pandas_rhses + self.scalar_rhses + (randn(10, 5),
-                                                              randn(5))
+        self.lhses = self.pandas_lhses + self.scalar_lhses
+        self.rhses = self.pandas_rhses + self.scalar_rhses
 
     def setup_ops(self):
         self.cmp_ops = expr._cmp_ops_syms
@@ -228,8 +228,9 @@ class TestEvalNumexprPandas(unittest.TestCase):
             pass
         else:
             # these are not compatible operands
-            if (com.is_series(lhs_new) and com.is_frame(rhs_new) or
-                _bool_and_frame(lhs_new, rhs_new)):
+            if (isinstance(lhs_new, pd.Series) and
+                    isinstance(rhs_new, pd.DataFrame) or
+                    _bool_and_frame(lhs_new, rhs_new)):
                 self.assertRaises(TypeError, _eval_single_bin, lhs_new, '&',
                                   rhs_new, self.engine)
             elif _series_and_2d_ndarray(lhs_new, rhs_new):
@@ -464,7 +465,6 @@ class TestEvalPythonPandas(TestEvalPythonPython):
     def check_chained_cmp_op(self, lhs, cmp1, mid, cmp2, rhs):
         TestEvalNumexprPandas.check_chained_cmp_op(self, lhs, cmp1, mid, cmp2,
                                                    rhs)
-
 
 
 f = lambda *args, **kwargs: np.random.randn()

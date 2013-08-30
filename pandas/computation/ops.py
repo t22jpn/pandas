@@ -353,7 +353,7 @@ class BinOp(Op):
         lhs, rhs = self.lhs, self.rhs
 
         if (is_term(lhs) and lhs.kind.startswith('datetime') and is_term(rhs)
-            and rhs.isscalar):
+                and rhs.isscalar):
             v = rhs.value
             if isinstance(v, (int, float)):
                 v = stringify(v)
@@ -364,7 +364,7 @@ class BinOp(Op):
             self.rhs.update(v)
 
         if (is_term(rhs) and rhs.kind.startswith('datetime') and
-            is_term(lhs) and lhs.isscalar):
+                is_term(lhs) and lhs.isscalar):
             v = lhs.value
             if isinstance(v, (int, float)):
                 v = stringify(v)

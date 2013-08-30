@@ -12,7 +12,6 @@ import itertools
 import warnings
 
 import numpy as np
-import pandas
 from pandas import (Series, TimeSeries, DataFrame, Panel, Panel4D, Index,
                     MultiIndex, Int64Index)
 from pandas.sparse.api import SparseSeries, SparseDataFrame, SparsePanel
@@ -2408,7 +2407,7 @@ class SparsePanelFixed(GenericFixed):
         sdict = {}
         for name in items:
             key = 'sparse_frame_%s' % name
-            s = SparseFrameStorer(self.parent, getattr(self.group, key))
+            s = SparseFrameFixed(self.parent, getattr(self.group, key))
             s.infer_axes()
             sdict[name] = s.read()
         return SparsePanel(sdict, items=items, default_kind=self.default_kind,
