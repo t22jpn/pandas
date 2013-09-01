@@ -348,7 +348,6 @@ class UnaryOp(ops.UnaryOp):
         return None
 
 
-
 _op_classes = {'unary': UnaryOp}
 
 class ExprVisitor(BaseExprVisitor):
@@ -402,6 +401,9 @@ class ExprVisitor(BaseExprVisitor):
                     return resolved
 
         raise ValueError("Invalid Attribute context {0}".format(ctx.__name__))
+
+    def translate_In(self, op):
+        return ast.Eq() if isinstance(op, ast.In) else op
 
 
 class Expr(expr.Expr):
