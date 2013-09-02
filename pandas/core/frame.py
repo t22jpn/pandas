@@ -1972,7 +1972,7 @@ class DataFrame(NDFrame):
                 index_resolvers[self.index.name] = self.index
             index_resolvers.update({'index': self.index,
                                     'columns': self.columns})
-            resolvers = [self, index_resolvers]
+            resolvers = [index_resolvers, self]
         kwargs['local_dict'] = _ensure_scope(resolvers=resolvers, **kwargs)
         return _eval(expr, **kwargs)
 
