@@ -749,6 +749,7 @@ class TestOperationsNumExprPandas(unittest.TestCase):
         skip_if_no_ne()
         cls.engine = 'numexpr'
         cls.parser = 'pandas'
+        cls.arith_ops = expr._arith_ops_syms + expr._cmp_ops_syms
 
     @classmethod
     def tearDownClass(cls):
@@ -943,6 +944,9 @@ class TestOperationsNumExprPython(TestOperationsNumExprPandas):
             raise nose.SkipTest("numexpr engine not installed")
         cls.engine = 'numexpr'
         cls.parser = 'python'
+        cls.arith_ops = expr._arith_ops_syms + expr._cmp_ops_syms
+        cls.arith_ops = filter(lambda x: x not in ('in', 'not in'),
+                               cls.arith_ops)
 
     def test_fails_and(self):
         df = DataFrame(np.random.randn(5, 3))
@@ -1011,6 +1015,9 @@ class TestOperationsPythonPython(TestOperationsNumExprPython):
     @classmethod
     def setUpClass(cls):
         cls.engine = cls.parser = 'python'
+        cls.arith_ops = expr._arith_ops_syms + expr._cmp_ops_syms
+        cls.arith_ops = filter(lambda x: x not in ('in', 'not in'),
+                               cls.arith_ops)
 
     def test_fails_ampersand(self):
         raise nose.SkipTest("known failer for now")

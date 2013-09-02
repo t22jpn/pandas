@@ -16,13 +16,14 @@ from pandas.computation.common import NameResolutionError
 from pandas.computation.ops import (_cmp_ops_syms, _bool_ops_syms,
                                     _arith_ops_syms, _unary_ops_syms, is_term)
 from pandas.computation.ops import _reductions, _mathops, _LOCAL_TAG
-from pandas.computation.ops import BinOp, UnaryOp, Term, Constant, Div
+from pandas.computation.ops import Op, BinOp, UnaryOp, Term, Constant, Div
 
 
 def _ensure_scope(level=2, global_dict=None, local_dict=None, resolvers=None,
                   **kwargs):
     """ ensure that we are grabbing the correct scope """
-    return Scope(global_dict, local_dict, level=level, resolvers=resolvers)
+    return Scope(gbls=global_dict, lcls=local_dict, level=level,
+                 resolvers=resolvers)
 
 
 def _check_disjoint_resolver_names(resolver_keys, local_keys, global_keys):
@@ -88,21 +89,20 @@ class Scope(StringMixin):
         self.globals['True'] = True
         self.globals['False'] = False
 
-
-        self.resolver_keys = frozenset(reduce(operator.add, (list(o.keys()) for
-                                                             o in
-                                                             self.resolvers),
-                                              []))
+        res_keys = (list(o.keys()) for o in self.resolvers)
+        self.resolver_keys = frozenset(reduce(operator.add, res_keys, []))
         self._global_resolvers = self.resolvers + (self.locals, self.globals)
         self._resolver = None
-        self.resolver_dict = dict((k, self.resolve(k))
-                                  for k in self.resolver_keys)
+
+        self.resolver_dict = {}
+        for o in self.resolvers:
+            self.resolver_dict.update(dict(o))
 
     def __unicode__(self):
         return com.pprint_thing("locals: {0}\nglobals: {0}\nresolvers: "
-                                "{0}".format(self.locals.keys(),
-                                             self.globals.keys(),
-                                             self.resolver_keys))
+                                "{0}".format(list(self.locals.keys()),
+                                             list(self.globals.keys()),
+                                             list(self.resolver_keys)))
 
     def __getitem__(self, key):
         return self.resolve(key, globally=False)
@@ -202,7 +202,6 @@ def _preparse(source):
     return _replace_booleans(_rewrite_assign(source))
 
 
-
 # partition all AST nodes
 _all_nodes = frozenset(filter(lambda x: isinstance(x, type) and
                               issubclass(x, ast.AST),
@@ -238,8 +237,7 @@ _hacked_nodes = frozenset(['Assign', 'Module', 'Expr'])
 
 _unsupported_expr_nodes = frozenset(['Yield', 'GeneratorExp', 'IfExp',
                                      'DictComp', 'SetComp', 'Repr', 'Lambda',
-                                     'Set', 'In', 'NotIn', 'AST', 'Is',
-                                     'IsNot'])
+                                     'Set', 'AST', 'Is', 'IsNot'])
 
 # these nodes are low priority or won't ever be supported (e.g., AST)
 _unsupported_nodes = ((_stmt_nodes | _mod_nodes | _handler_nodes |
@@ -267,7 +265,7 @@ def disallow(nodes):
     def disallowed(cls):
         cls.unsupported_nodes = ()
         for node in nodes:
-            new_method =  _node_not_implemented(node, cls)
+            new_method = _node_not_implemented(node, cls)
             name = 'visit_{0}'.format(node)
             cls.unsupported_nodes += (name,)
             setattr(cls, name, new_method)
@@ -282,6 +280,7 @@ def _op_maker(op_class, op_symbol):
 
 
 _op_classes = {'binary': BinOp, 'unary': UnaryOp}
+
 
 def add_ops(op_classes):
     def f(cls):
@@ -306,14 +305,15 @@ class BaseExprVisitor(ast.NodeVisitor):
     """Custom ast walker
     """
     binary_ops = _cmp_ops_syms + _bool_ops_syms + _arith_ops_syms
-    binary_op_nodes = ('Gt', 'Lt', 'GtE', 'LtE', 'Eq', 'NotEq', 'BitAnd',
-                       'BitOr', 'And', 'Or', 'Add', 'Sub', 'Mult', None,
-                       'Pow', 'FloorDiv', 'Mod')
+    binary_op_nodes = ('Gt', 'Lt', 'GtE', 'LtE', 'Eq', 'NotEq', 'In', 'NotIn',
+                       'BitAnd', 'BitOr', 'And', 'Or', 'Add', 'Sub', 'Mult',
+                       None, 'Pow', 'FloorDiv', 'Mod')
     binary_op_nodes_map = dict(zip(binary_ops, binary_op_nodes))
 
     unary_ops = _unary_ops_syms
     unary_op_nodes = 'UAdd', 'USub', 'Invert', 'Not'
     unary_op_nodes_map = dict(zip(unary_ops, unary_op_nodes))
+    rewrite_map = {ast.Eq: ast.In, ast.NotEq: ast.NotIn}
 
     def __init__(self, env, engine, parser, preparser=_preparse):
         self.env = env
@@ -342,11 +342,63 @@ class BaseExprVisitor(ast.NodeVisitor):
     def visit_Expr(self, node, **kwargs):
         return self.visit(node.value, **kwargs)
 
+    def _rewrite_membership_op(self, node, left, right):
+        # the kind of the operator (is actually an instance)
+        op_class = node.op
+        op_type = type(op_class)
+
+        # only convert eq/ne to in if we have a list compared with something
+        # else
+        if is_term(left) and is_term(right) and op_type in self.rewrite_map:
+            get_inst = lambda x: isinstance(getattr(x, 'value'),
+                                            (list, string_types))
+            left_list, right_list = map(get_inst, (left, right))
+
+            if left_list or right_list:
+                op_class = self.rewrite_map[op_type]()
+
+            # swap the operands so things like a == [1, 2] are translated to
+            # [1, 2] in a -> a.isin([1, 2])
+            if right_list:
+                left, right = right, left
+
+        # finally visit a possibly new operator node
+        op = self.visit(op_class)
+        return op, op_class, left, right
+
+    def _possibly_transform_eq_ne(self, node, left=None, right=None):
+        if left is None:
+            left = self.visit(node.left, side='left')
+        if right is None:
+            right = self.visit(node.right, side='right')
+        op, op_class, left, right = self._rewrite_membership_op(node, left,
+                                                                right)
+        return op, op_class, left, right
+
+    def _possibly_eval(self, binop, eval_in_python):
+        # eval `in` and `not in` (for now) in "partial" python space
+        # things that can be evaluated in "eval" space will be turned into
+        # temporary variables. for example,
+        # [1,2] in a + 2 * b
+        # in that case a + 2 * b will be evaluated using numexpr, and the "in"
+        # call will be evaluated using isin (in python space)
+        return binop.evaluate(self.env, self.engine, self.parser,
+                              self.term_type, eval_in_python)
+
+    def _possibly_evaluate_binop(self, op, op_class, lhs, rhs,
+                                 eval_in_python=('in', 'not in')):
+        res = op(lhs, rhs)
+
+        # if we want to evaluate something in python space
+        if res.op in eval_in_python:
+            return self._possibly_eval(res, eval_in_python)
+
+        # otherwise our op is okay
+        return res
+
     def visit_BinOp(self, node, **kwargs):
-        op = self.visit(node.op)
-        left = self.visit(node.left, side='left')
-        right = self.visit(node.right, side='right')
-        return op(left, right)
+        op, op_class, left, right = self._possibly_transform_eq_ne(node)
+        return self._possibly_evaluate_binop(op, op_class, left, right)
 
     def visit_Div(self, node, **kwargs):
         return lambda lhs, rhs: Div(lhs, rhs,
@@ -454,61 +506,62 @@ class BaseExprVisitor(ast.NodeVisitor):
         keywords = {}
         for key in node.keywords:
             if not isinstance(key, ast.keyword):
-                raise ValueError(
-                    "keyword error in function call '{0}'".format(node.func.id))
+                raise ValueError("keyword error in function call "
+                                 "'{0}'".format(node.func.id))
             keywords[key.arg] = self.visit(key.value).value
         if node.kwargs is not None:
             keywords.update(self.visit(node.kwargs).value)
 
         return self.const_type(res(*args, **keywords), self.env)
 
+    def translate_In(self, op):
+        return op
+
     def visit_Compare(self, node, **kwargs):
         ops = node.ops
         comps = node.comparators
 
-        def translate(op):
-            if isinstance(op, ast.In):
-                return ast.Eq()
-            return op
-
+        # base case: we have something like a CMP b
         if len(comps) == 1:
-            return self.visit(translate(ops[0]))(self.visit(node.left, side='left'),
-                                                 self.visit(comps[0], side='right'))
+            op = self.translate_In(ops[0])
+            binop = ast.BinOp(op=op, left=node.left, right=comps[0])
+            return self.visit(binop)
+
+        # recursive case: we have a chained comparison, a CMP b CMP c, etc.
         left = node.left
         values = []
         for op, comp in zip(ops, comps):
             new_node = self.visit(ast.Compare(comparators=[comp], left=left,
-                                              ops=[translate(op)]))
+                                              ops=[self.translate_In(op)]))
             left = comp
             values.append(new_node)
         return self.visit(ast.BoolOp(op=ast.And(), values=values))
 
+    def _try_visit_binop(self, bop):
+        if isinstance(bop, (Op, Term)):
+            return bop
+        return self.visit(bop)
+
     def visit_BoolOp(self, node, **kwargs):
-        op = self.visit(node.op)
         def visitor(x, y):
-            try:
-                lhs = self.visit(x)
-            except TypeError:
-                lhs = x
+            lhs = self._try_visit_binop(x)
+            rhs = self._try_visit_binop(y)
 
-            try:
-                rhs = self.visit(y)
-            except TypeError:
-                rhs = y
-
-            return op(lhs, rhs)
+            op, op_class, lhs, rhs = self._possibly_transform_eq_ne(node, lhs,
+                                                                    rhs)
+            return self._possibly_evaluate_binop(op, node.op, lhs, rhs)
 
         operands = node.values
         return reduce(visitor, operands)
 
 
 _python_not_supported = frozenset(['Assign', 'Tuple', 'Dict', 'Call',
-                                   'BoolOp'])
+                                   'BoolOp', 'In', 'NotIn'])
 _numexpr_supported_calls = frozenset(_reductions + _mathops)
 
 
 @disallow((_unsupported_nodes | _python_not_supported) -
-          (_boolop_nodes | frozenset(['BoolOp', 'Attribute'])))
+          (_boolop_nodes | frozenset(['BoolOp', 'Attribute', 'In', 'NotIn'])))
 class PandasExprVisitor(BaseExprVisitor):
     def __init__(self, env, engine, parser,
                  preparser=lambda x: _replace_locals(_replace_booleans(x))):

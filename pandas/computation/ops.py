@@ -58,6 +58,11 @@ def _possibly_update_key(d, value, old_key, new_key=None):
 
 
 class Term(StringMixin):
+    def __new__(cls, name, env, side=None, encoding=None):
+        klass = Constant if not isinstance(name, string_types) else cls
+        return StringMixin.__new__(klass, name, env, side=side,
+                                   encoding=encoding)
+
     def __init__(self, name, env, side=None, encoding=None):
         self._name = name
         self.env = env
@@ -77,7 +82,6 @@ class Term(StringMixin):
         return self.value
 
     def _resolve_name(self):
-        #import ipdb; ipdb.set_trace()
         env = self.env
         key = self.name
         res = env.resolve(self.local_name, globally=not self.local)
@@ -192,10 +196,14 @@ class Term(StringMixin):
     def name(self, new_name):
         self._name = new_name
 
+    def evaluate(self, *args, **kwargs):
+        return self
+
 
 class Constant(Term):
-    def __init__(self, value, env):
-        super(Constant, self).__init__(value, env)
+    def __init__(self, value, env, side=None, encoding=None):
+        super(Constant, self).__init__(value, env, side=side,
+                                       encoding=encoding)
 
     def _resolve_name(self):
         return self._name
@@ -247,8 +255,26 @@ class Op(StringMixin):
         return parened
 
 
-_cmp_ops_syms = '>', '<', '>=', '<=', '==', '!='
-_cmp_ops_funcs = op.gt, op.lt, op.ge, op.le, op.eq, op.ne
+def _in(x, y):
+    try:
+        return y.isin(x)
+    except AttributeError:
+        return x in y
+    except TypeError:
+        return y.isin([x])
+
+
+def _not_in(x, y):
+    try:
+        return ~y.isin(x)
+    except AttributeError:
+        return x not in y
+    except TypeError:
+        return ~y.isin([x])
+
+
+_cmp_ops_syms = '>', '<', '>=', '<=', '==', '!=', 'in', 'not in'
+_cmp_ops_funcs = op.gt, op.lt, op.ge, op.le, op.eq, op.ne, _in, _not_in
 _cmp_ops_dict = dict(zip(_cmp_ops_syms, _cmp_ops_funcs))
 
 _bool_ops_syms = '&', '|', 'and', 'or'
@@ -373,6 +399,38 @@ class BinOp(Op):
             if v.tz is not None:
                 v = v.tz_convert('UTC')
             self.lhs.update(v)
+
+    def evaluate(self, env, engine, parser, term_type, eval_in_python):
+        if engine == 'python':
+            res = self(env)
+        else:
+            # recurse over the left nodes
+            left = self.lhs.evaluate(env, engine, parser, term_type=term_type,
+                                     eval_in_python=eval_in_python)
+
+            # recurse over the right nodes
+            right = self.rhs.evaluate(env, engine, parser, term_type=term_type,
+                                      eval_in_python=eval_in_python)
+
+            # base cases
+            if is_term(left) and is_term(right):
+                if self.op not in eval_in_python:
+                    res = pd.eval(com.pprint_thing(self), local_dict=env)
+                else:
+                    res = self.func(left.value, right.value)
+            elif not is_term(left) and is_term(right):
+                left = pd.eval(com.pprint_thing(left), local_dict=env)
+                res = self.func(left, right.value)
+            elif is_term(left) and not is_term(right):
+                right = pd.eval(com.pprint_thing(right), local_dict=env)
+                res = self.func(left.value, right)
+            elif not (is_term(left) or is_term(right)):
+                left = pd.eval(com.pprint_thing(left), local_dict=env)
+                right = pd.eval(com.pprint_thing(right), local_dict=env)
+                res = self.func(left, right)
+
+        name = env.add_tmp(res)
+        return term_type(name, env=env)
 
 
 class Div(BinOp):

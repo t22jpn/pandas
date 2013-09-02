@@ -8,6 +8,7 @@ from datetime import datetime
 
 import pandas as pd
 from pandas.compat import u, string_types
+from pandas.core.base import StringMixin
 import pandas.core.common as com
 from pandas.computation import expr, ops
 from pandas.computation.ops import is_term
@@ -28,6 +29,9 @@ class Scope(expr.Scope):
 
 
 class Term(ops.Term):
+    def __new__(cls, name, env, side=None):
+        klass = Constant if not isinstance(name, string_types) else cls
+        return StringMixin.__new__(klass, name, env, side=side)
 
     def __init__(self, name, env, side=None):
         super(Term, self).__init__(name, env, side=side)
@@ -49,8 +53,8 @@ class Term(ops.Term):
 
 
 class Constant(Term):
-    def __init__(self, value, env):
-        super(Constant, self).__init__(value, env)
+    def __init__(self, value, env, side=None):
+        super(Constant, self).__init__(value, env, side=side)
 
     def _resolve_name(self):
         return self._name
@@ -404,6 +408,9 @@ class ExprVisitor(BaseExprVisitor):
 
     def translate_In(self, op):
         return ast.Eq() if isinstance(op, ast.In) else op
+
+    def _rewrite_membership_op(self, node, left, right):
+        return self.visit(node.op), node.op, left, right
 
 
 class Expr(expr.Expr):
