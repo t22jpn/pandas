@@ -4,6 +4,7 @@ import sys
 import inspect
 import tokenize
 import datetime
+import struct
 
 from functools import partial
 
@@ -38,6 +39,25 @@ def _check_disjoint_resolver_names(resolver_keys, local_keys, global_keys):
         raise NameResolutionError(msg)
 
 
+def _replacer(x, pad_size):
+    # get the hex repr of the binary char and remove 0x and pad by pad_size
+    # zeros
+    try:
+        hexin = ord(x)
+    except TypeError:
+        # bytes literals masquerade as ints when iterating in py3
+        hexin = x
+
+    return hex(hexin).replace('0x', '').rjust(pad_size, '0')
+
+
+def _raw_hex_id(obj, pad_size=2):
+    # interpret as a pointer since that's what really what id returns
+    packed = struct.pack('@P', id(obj))
+
+    return ''.join(_replacer(x, pad_size) for x in packed)
+
+
 class Scope(StringMixin):
     """Object to hold scope, with a few bells to deal with some custom syntax
     added by pandas.
@@ -58,14 +78,14 @@ class Scope(StringMixin):
     resolver_keys : frozenset
     """
     __slots__ = ('globals', 'locals', 'resolvers', '_global_resolvers',
-                 'resolver_keys', '_resolver', 'level')
+                 'resolver_keys', '_resolver', 'level', 'ntemps')
 
     def __init__(self, gbls=None, lcls=None, level=1, resolvers=None):
         self.level = level
         self.resolvers = tuple(resolvers or [])
         self.globals = dict()
         self.locals = dict()
-        self.ntemps = 0  # number of temporary variables in this scope
+        self.ntemps = 1  # number of temporary variables in this scope
 
         if isinstance(lcls, Scope):
             ld, lcls = lcls, dict()
@@ -171,10 +191,10 @@ class Scope(StringMixin):
         if not isinstance(d, dict):
             raise TypeError("Cannot add value to object of type {0!r}, "
                             "scope must be a dictionary"
-                            "".format(d.__class__.__name__))
-        name = 'tmp_var_{0}_{1}_{2}'.format(value.__class__.__name__,
-                                            self.ntemps,
-                                            pd.util.testing.rands(10))
+                            "".format(type(d).__name__))
+        name = 'tmp_var_{0}_{1}_{2}'.format(type(value).__name__, self.ntemps,
+                                            _raw_hex_id(self))
+        print(name)
         d[name] = value
 
         # only increment if the variable gets put in the scope
