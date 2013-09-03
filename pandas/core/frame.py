@@ -1965,6 +1965,13 @@ class DataFrame(NDFrame):
         --------
         pandas.eval
         pandas.DataFrame.eval
+
+        Examples
+        --------
+        >>> from numpy.random import randn
+        >>> from pandas import DataFrame
+        >>> df = DataFrame(randn(10, 2), columns=list('ab'))
+        >>> df.query('a > b')
         """
         # need to go up at least 4 stack frames
         # 4 expr.Scope
@@ -2029,6 +2036,13 @@ class DataFrame(NDFrame):
         For more details see the API documentation for :func:`~pandas.eval`.
         For detailed examples see :ref:`enhancing performance with eval
         <enhancingperf.eval>`.
+
+        Examples
+        --------
+        >>> from numpy.random import randn
+        >>> from pandas import DataFrame
+        >>> df = DataFrame(randn(10, 2), columns=list('ab'))
+        >>> df.eval('a + b')
         """
         resolvers = kwargs.pop('resolvers', None)
         if resolvers is None:
