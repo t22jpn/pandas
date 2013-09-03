@@ -473,9 +473,11 @@ class TestEvalNumexprPython(TestEvalNumexprPandas):
         cls.parser = 'python'
 
     def setup_ops(self):
-        self.cmp_ops = expr._cmp_ops_syms
+        self.cmp_ops = list(filter(lambda x: x not in ('in', 'not in'),
+                                   expr._cmp_ops_syms))
         self.cmp2_ops = self.cmp_ops[::-1]
-        self.bin_ops = (s for s in expr._bool_ops_syms if s not in ('and', 'or'))
+        self.bin_ops = [s for s in expr._bool_ops_syms
+                        if s not in ('and', 'or')]
         self.special_case_ops = _special_case_arith_ops_syms
         self.arith_ops = _good_arith_ops
         self.unary_ops = '+', '-', '~'
@@ -761,7 +763,7 @@ class TestOperationsNumExprPandas(unittest.TestCase):
         return pd.eval(*args, **kwargs)
 
     def test_simple_arith_ops(self):
-        ops = expr._arith_ops_syms + expr._cmp_ops_syms
+        ops = self.arith_ops
 
         for op in filter(lambda x: x != '//', ops):
             ex = '1 {0} 1'.format(op)
@@ -1041,6 +1043,7 @@ class TestOperationsPythonPandas(TestOperationsNumExprPandas):
     def setUpClass(cls):
         cls.engine = 'python'
         cls.parser = 'pandas'
+        cls.arith_ops = expr._arith_ops_syms + expr._cmp_ops_syms
 
 
 _var_s = randn(10)

@@ -116,7 +116,8 @@ def eval(expr, parser='pandas', engine='numexpr', truediv=True,
     _check_parser(parser)
 
     # make sure all the resolvers have a __getitem__ method
-    _check_resolvers(resolvers)
+    if resolvers is not None:
+        _check_resolvers(resolvers)
 
     # get our (possibly passed-in) scope
     env = _ensure_scope(global_dict=global_dict, local_dict=local_dict,

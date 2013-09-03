@@ -7,7 +7,7 @@ from functools import partial
 from datetime import datetime
 
 import pandas as pd
-from pandas.compat import u, string_types
+from pandas.compat import u, string_types, PY3
 from pandas.core.base import StringMixin
 import pandas.core.common as com
 from pandas.computation import expr, ops
@@ -31,7 +31,10 @@ class Scope(expr.Scope):
 class Term(ops.Term):
     def __new__(cls, name, env, side=None):
         klass = Constant if not isinstance(name, string_types) else cls
-        return StringMixin.__new__(klass, name, env, side=side)
+        supr_new = StringMixin.__new__
+        if PY3:
+            return supr_new(klass)
+        return supr_new(klass, name, env, side=side, encoding=encoding)
 
     def __init__(self, name, env, side=None):
         super(Term, self).__init__(name, env, side=side)
