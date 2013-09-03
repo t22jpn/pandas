@@ -29,15 +29,15 @@ class Scope(expr.Scope):
 
 
 class Term(ops.Term):
-    def __new__(cls, name, env, side=None):
+    def __new__(cls, name, env, side=None, encoding=None):
         klass = Constant if not isinstance(name, string_types) else cls
         supr_new = StringMixin.__new__
         if PY3:
             return supr_new(klass)
         return supr_new(klass, name, env, side=side, encoding=encoding)
 
-    def __init__(self, name, env, side=None):
-        super(Term, self).__init__(name, env, side=side)
+    def __init__(self, name, env, side=None, encoding=None):
+        super(Term, self).__init__(name, env, side=side, encoding=encoding)
 
     def _resolve_name(self):
         # must be a queryables
@@ -56,8 +56,9 @@ class Term(ops.Term):
 
 
 class Constant(Term):
-    def __init__(self, value, env, side=None):
-        super(Constant, self).__init__(value, env, side=side)
+    def __init__(self, value, env, side=None, encoding=None):
+        super(Constant, self).__init__(value, env, side=side,
+                                       encoding=encoding)
 
     def _resolve_name(self):
         return self._name
