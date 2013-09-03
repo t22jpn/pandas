@@ -11413,6 +11413,45 @@ class TestDataFrameQueryStrings(object):
         res = df['["a", "b"] != strings']
         assert_frame_equal(res, expect)
 
+    def check_query_with_string_columns(self, parser, engine):
+        skip_if_no_ne(engine)
+        df = DataFrame({'a': list('aaaabbbbcccc'),
+                        'b': list('aabbccddeeff'),
+                        'c': np.random.randint(5, size=12),
+                        'd': np.random.randint(9, size=12)})
+        if parser == 'pandas':
+            res = df.query('a in b', parser=parser, engine=engine)
+            expec = df[df.b.isin(df.a)]
+            assert_frame_equal(res, expec)
+
+            res = df.query('a in b and c < d', parser=parser, engine=engine)
+            expec = df[df.b.isin(df.a) & (df.c < df.d)]
+            assert_frame_equal(res, expec)
+        else:
+            with assertRaises(NotImplementedError):
+                df.query('a in b', parser=parser, engine=engine)
+
+            with assertRaises(NotImplementedError):
+                df.query('a in b and c < d', parser=parser, engine=engine)
+
+    def test_query_with_string_columns(self):
+        for parser, engine in product(PARSERS, ENGINES):
+            yield self.check_query_with_string_columns, parser, engine
+
+    def test_query_with_string_columns_numexpr_only(self):
+        skip_if_no_ne()
+        df = DataFrame({'a': list('aaaabbbbcccc'),
+                        'b': list('aabbccddeeff'),
+                        'c': np.random.randint(5, size=12),
+                        'd': np.random.randint(9, size=12)})
+        res = df['a in b']
+        expec = df[df.b.isin(df.a)]
+        assert_frame_equal(res, expec)
+
+        res = df['a in b and c < d']
+        expec = df[df.b.isin(df.a) & (df.c < df.d)]
+        assert_frame_equal(res, expec)
+
 
 class TestDataFrameEvalNumExprPandas(unittest.TestCase):
     @classmethod
