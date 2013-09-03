@@ -1044,6 +1044,7 @@ If instead you don't want to or cannot name your index, you can use the name
    :suppress:
 
    index = old_index
+   del old_index
 
 A use case for :meth:`~pandas.DataFrame.query` is when you have a collection of
 :class:`~pandas.DataFrame` s that have a subset of column names (or index
@@ -1191,6 +1192,7 @@ Of course, expressions can be arbitrarily complex too
    :suppress:
 
    d = old_d
+   del old_d
 
 .. _indexing.class:
 
