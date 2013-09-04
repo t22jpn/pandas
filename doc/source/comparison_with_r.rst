@@ -24,6 +24,60 @@ of a translation guide for users of these R packages.
 data.frame
 ----------
 
+``subset``
+~~~~~~~~~~
+
+The :meth:`~pandas.DataFrame.query` method is similar to the base R ``subset``
+function. In R you might want to get the rows of a ``data.frame`` where one
+column's values are less than another column's values:
+
+    .. code-block:: r
+
+       df <- data.frame(a=rnorm(10), b=rnorm(10))
+       subset(df, a <= b)
+
+
+In ``pandas``, there are 3 ways to achieve this. You can use
+:meth:`~pandas.DataFrame.query` or pass an expression as if it were an
+index/slice:
+
+    .. code-block:: python
+
+       df = DataFrame({'a': randn(10), 'b': randn(10)})
+       df.query('a <= b')
+       df['a <= b']
+       df[df.a <= df.b]
+
+For more details and examples see :ref:`the query documentation
+<indexing.query>`.
+
+
+``with``
+~~~~~~~~
+
+.. versionadded:: 0.13
+
+An expression using a data.frame called ``df`` in R with the columns ``a`` and
+``b`` would be evaluated using ``with`` like so:
+
+    .. code-block:: r
+
+       df <- data.frame(a=rnorm(10), b=rnorm(10))
+       with(df, a + b)
+       df$a + df$b  # same as the previous expression
+
+In ``pandas`` the equivalent expression, using the
+:meth:`~pandas.DataFrame.eval` method, would be:
+
+    .. ipython:: python
+
+       df = DataFrame({'a': randn(10), 'b': randn(10)})
+       df.eval('a + b')
+       df.a + df.b  # same as the previous expression
+
+For more details and examples see :ref:`the eval documentation
+<enhancingperf.eval>`.
+
 zoo
 ---
 
@@ -35,4 +89,3 @@ plyr
 
 reshape / reshape2
 ------------------
-

@@ -1913,27 +1913,6 @@ class DataFrame(NDFrame):
 
         Notes
         -----
-        This method is similar to the base R ``subset`` function. In R you
-        might want to get the rows of a ``data.frame`` where one columns values
-        are less than another columns values:
-
-            .. code-block:: r
-
-               df <- data.frame(a=rnorm(10), b=rnorm(10))
-               subset(df, a <= b)
-
-
-        In ``pandas``, there are 2 ways to achieve this. You can use
-        :meth:`~pandas.DataFrame.query` or pass an expression as if it were an
-        index/slice:
-
-            .. code-block:: python
-
-               df = DataFrame({'a': randn(10), 'b': randn(10)})
-               df.query('a <= b')
-               df['a <= b']
-
-
         This method uses the top-level :func:`~pandas.eval` function to
         evaluate the passed query.
 
@@ -1964,7 +1943,7 @@ class DataFrame(NDFrame):
         See Also
         --------
         pandas.eval
-        pandas.DataFrame.eval
+        DataFrame.eval
 
         Examples
         --------
@@ -1972,6 +1951,7 @@ class DataFrame(NDFrame):
         >>> from pandas import DataFrame
         >>> df = DataFrame(randn(10, 2), columns=list('ab'))
         >>> df.query('a > b')
+        >>> df[df.a > df.b]  # same result as the previous expression
         """
         # need to go up at least 4 stack frames
         # 4 expr.Scope
@@ -2010,29 +1990,6 @@ class DataFrame(NDFrame):
 
         Notes
         -----
-        This method is very similar to R's "with" function. For example, an
-        expression using a data.frame called "df"
-        n R with the columns "a" and "b" could be evaluated using ``with`` like
-        so:
-
-            .. code-block:: r
-
-               df <- data.frame(a=rnorm(10), b=rnorm(10))
-               with(df, a + b)
-
-        In pandas the equivalent expression would be
-
-            .. code-block:: python
-
-               df = DataFrame({'a': randn(10), 'b': randn(10)})
-               df.eval('a + b')
-
-        ``pandas`` adds additional functionality not seen in R via the
-        :meth:`~pandas.DataFrame.query` method and also by allowing an
-        expression to be used for indexing. See the
-        :meth:`~pandas.DataFrame.query` for a comparison with R's ``subset``
-        function.
-
         For more details see the API documentation for :func:`~pandas.eval`.
         For detailed examples see :ref:`enhancing performance with eval
         <enhancingperf.eval>`.
