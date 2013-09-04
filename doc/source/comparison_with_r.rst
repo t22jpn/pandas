@@ -1,31 +1,32 @@
 .. currentmodule:: pandas
 .. _compare_with_r:
 
-*******************************
 Comparison with R / R libraries
 *******************************
 
-Since pandas aims to provide a lot of the data manipulation and analysis
-functionality that people use R for, this page was started to provide a more
-detailed look at the R language and it's many 3rd party libraries as they
-relate to pandas. In offering comparisons with R and CRAN libraries, we care
-about the following things:
+Since ``pandas`` aims to provide a lot of the data manipulation and analysis
+functionality that people use `R <http://www.r-project.org/>`__ for, this page
+was started to provide a more detailed look at the `R language
+<http://en.wikipedia.org/wiki/R_(programming_language)>`__ and its many third
+party libraries as they relate to ``pandas``. In comparisons with R and CRAN
+libraries, we care about the following things:
 
-  - **Functionality / flexibility**: what can / cannot be done with each tool
-  - **Performance**: how fast are operations. Hard numbers / benchmarks are
+  - **Functionality / flexibility**: what can/cannot be done with each tool
+  - **Performance**: how fast are operations. Hard numbers/benchmarks are
     preferable
-  - **Ease-of-use**: is one tool easier or harder to use (you may have to be
-    the judge of this given side-by-side code comparisons)
+  - **Ease-of-use**: Is one tool easier/harder to use (you may have to be
+    the judge of this, given side-by-side code comparisons)
 
-As I do not have an encyclopedic knowledge of R packages, feel free to suggest
-additional CRAN packages to add to this list. This is also here to offer a big
-of a translation guide for users of these R packages.
+This page is also here to offer a bit of a translation guide for users of these
+R packages.
 
-data.frame
-----------
+Base R
+------
 
-``subset``
+|subset|_
 ~~~~~~~~~~
+
+.. versionadded:: 0.13
 
 The :meth:`~pandas.DataFrame.query` method is similar to the base R ``subset``
 function. In R you might want to get the rows of a ``data.frame`` where one
@@ -35,24 +36,28 @@ column's values are less than another column's values:
 
        df <- data.frame(a=rnorm(10), b=rnorm(10))
        subset(df, a <= b)
+       df[df$a <= df$b,]  # note the comma
 
-
-In ``pandas``, there are 3 ways to achieve this. You can use
+In ``pandas``, there are a few ways to perform subsetting. You can use
 :meth:`~pandas.DataFrame.query` or pass an expression as if it were an
-index/slice:
+index/slice as well as standard boolean indexing:
 
-    .. code-block:: python
+    .. ipython:: python
+
+       from pandas import DataFrame
+       from numpy.random import randn
 
        df = DataFrame({'a': randn(10), 'b': randn(10)})
        df.query('a <= b')
        df['a <= b']
        df[df.a <= df.b]
+       df.loc[df.a <= df.b]
 
 For more details and examples see :ref:`the query documentation
 <indexing.query>`.
 
 
-``with``
+|with|_
 ~~~~~~~~
 
 .. versionadded:: 0.13
@@ -75,8 +80,9 @@ In ``pandas`` the equivalent expression, using the
        df.eval('a + b')
        df.a + df.b  # same as the previous expression
 
-For more details and examples see :ref:`the eval documentation
-<enhancingperf.eval>`.
+In certain cases :meth:`~pandas.DataFrame.eval` will be much faster than
+evaluation in pure Python. For more details and examples see :ref:`the eval
+documentation <enhancingperf.eval>`.
 
 zoo
 ---
@@ -89,3 +95,10 @@ plyr
 
 reshape / reshape2
 ------------------
+
+
+.. |with| replace:: ``with``
+.. _with: http://finzi.psych.upenn.edu/R/library/base/html/with.html
+
+.. |subset| replace:: ``subset``
+.. _subset: http://finzi.psych.upenn.edu/R/library/base/html/subset.html

@@ -292,10 +292,10 @@ Read more in the `cython docs <http://docs.cython.org/>`__.
 
 .. _enhancingperf.eval:
 
-.. versionadded:: 0.13
-
 Expression Evaluation via :func:`~pandas.eval`
 ----------------------------------------------
+
+.. versionadded:: 0.13
 
 New in pandas v0.13 a top-level function :func:`~pandas.eval` implements
 expression evaluation of expressions containing :class:`~pandas.Series` and
