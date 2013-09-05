@@ -11225,7 +11225,7 @@ class TestDataFrameQueryGetitem(unittest.TestCase):
         df = self.frame
         exprs = 'and', 'or', 'not'
         exprs += tuple(x + tm.rands(5) for x in exprs)
-        exprs += tuple(tm.rands(5) + x for x in exprs)
+        exprs += tuple('A' + tm.rands(5) + x for x in exprs)
 
         for e in exprs:
             self.assertRaises(KeyError, df.__getitem__, e)
