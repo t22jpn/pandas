@@ -653,7 +653,7 @@ class Expr(StringMixin):
         self.env.locals.update(self.env.resolver_dict)
 
 
-_needs_filter = frozenset(['and', 'or', 'not'])
+_needs_filter = frozenset(['and', 'or', 'not', 'not in', 'in'])
 
 
 def maybe_expression(s, kind='pandas'):
@@ -664,8 +664,8 @@ def maybe_expression(s, kind='pandas'):
     ops = visitor.binary_ops + visitor.unary_ops
     filtered = frozenset(ops) - _needs_filter
     # make sure we have an op at least
-    return any(op in s or ' and ' in s or ' or ' in s or 'not ' in s for op in
-               filtered)
+    return any(op in s or ' and ' in s or ' or ' in s or 'not ' in s
+               or ' in ' in s or ' not in ' in s for op in filtered)
 
 
 def isexpr(s, check_names=True):

@@ -11222,19 +11222,28 @@ class TestDataFrameQueryGetitem(unittest.TestCase):
         assert_frame_equal(res, expec)
 
     def test_query_expressions_correct_failure(self):
+        import random
+        import string
+
         df = self.frame
         exprs = 'and', 'or', 'not'
         exprs += tuple(x + tm.rands(5) for x in exprs)
-        exprs += tuple('A' + tm.rands(5) + x for x in exprs)
+        exprs += tuple(random.choice(string.ascii_letters) + tm.rands(5) + x
+                       for x in exprs)
+
+        exprs += 'inb',
 
         for e in exprs:
-            self.assertRaises(KeyError, df.__getitem__, e)
+            with self.assertRaises(KeyError):
+                df[e]
 
         for e in (' and ', ' or ', ' not '):
             self.assertRaises(SyntaxError, df.__getitem__, e)
 
         x = tm.randbool(size=(self.frame.shape[0],))
         self.assertRaises(KeyError, df.__getitem__, 'x')
+
+        self.assertRaises(NameError, df.__getitem__, 'not inb')
 
     def test_query_expressions_with_index(self):
         df = DataFrame(np.random.randint(10, size=(10, 3)),
