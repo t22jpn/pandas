@@ -194,7 +194,6 @@ class Scope(StringMixin):
                             "".format(type(d).__name__))
         name = 'tmp_var_{0}_{1}_{2}'.format(type(value).__name__, self.ntemps,
                                             _raw_hex_id(self))
-        print(name)
         d[name] = value
 
         # only increment if the variable gets put in the scope
