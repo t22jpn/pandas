@@ -45,7 +45,7 @@ from pandas.util.testing import (assert_almost_equal,
                                  ensure_clean)
 from pandas.core.indexing import IndexingError
 from pandas.core.common import PandasError
-from pandas.util.compat import OrderedDict
+from pandas.compat import OrderedDict
 from pandas.computation.expr import Expr
 import pandas.computation as comp
 
