@@ -62,6 +62,15 @@ def randu(n):
     choices += string.digits
     return ''.join([random.choice(choices) for _ in range(n)])
 
+
+def choice(x, size=10):
+    """sample with replacement; uniform over the input"""
+    try:
+        return np.random.choice(x, size=size)
+    except AttributeError:
+        ind = np.random.randint(len(x), size=size)
+        return np.asarray(x)[ind]
+
 #------------------------------------------------------------------------------
 # Console debugging tools
 

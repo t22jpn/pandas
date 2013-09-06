@@ -11122,8 +11122,8 @@ class TestDataFrameQueryNumExprPandas(unittest.TestCase):
 class TestDataFrameQueryWithMultiIndex(object):
     def check_query_with_named_multiindex(self, parser, engine):
         skip_if_no_ne(engine)
-        a = np.random.choice(['red', 'green'], size=10)
-        b = np.random.choice(['eggs', 'ham'], size=10)
+        a = tm.choice(['red', 'green'], size=10)
+        b = tm.choice(['eggs', 'ham'], size=10)
         index = MultiIndex.from_arrays([a, b], names=['color', 'food'])
         df = DataFrame(randn(10, 2), index=index)
         ind = Series(df.index.get_level_values('color').values, index=index,
@@ -11176,8 +11176,8 @@ class TestDataFrameQueryWithMultiIndex(object):
 
     def check_query_with_unnamed_multiindex(self, parser, engine):
         skip_if_no_ne(engine)
-        a = np.random.choice(['red', 'green'], size=10)
-        b = np.random.choice(['eggs', 'ham'], size=10)
+        a = tm.choice(['red', 'green'], size=10)
+        b = tm.choice(['eggs', 'ham'], size=10)
         index = MultiIndex.from_arrays([a, b])
         df = DataFrame(randn(10, 2), index=index)
         res = df.query('ilevel_1 == "eggs"', parser=parser, engine=engine)
@@ -11192,7 +11192,7 @@ class TestDataFrameQueryWithMultiIndex(object):
 
     def check_query_with_partially_named_multiindex(self, parser, engine):
         skip_if_no_ne(engine)
-        a = np.random.choice(['red', 'green'], size=10)
+        a = tm.choice(['red', 'green'], size=10)
         b = np.arange(10)
         index = MultiIndex.from_arrays([a, b])
         index.names = [None, 'rating']
@@ -11205,7 +11205,7 @@ class TestDataFrameQueryWithMultiIndex(object):
 
         skip_if_no_ne(engine)
         skip_if_no_pandas_parser(parser)
-        a = np.random.choice(['red', 'green'], size=10)
+        a = tm.choice(['red', 'green'], size=10)
         b = np.arange(10)
         index = MultiIndex.from_arrays([a, b])
         index.names = [None, 'rating']
