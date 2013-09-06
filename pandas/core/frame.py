@@ -1893,6 +1893,29 @@ class DataFrame(NDFrame):
             raise ValueError('Must pass DataFrame with boolean values only')
         return self.where(key)
 
+    def _get_index_resolvers(self, axis):
+        # index or columns
+        axis_index = getattr(self, axis)
+        d = dict()
+
+        for i, name in enumerate(axis_index.names):
+            if name is not None:
+                key = level = name
+            else:
+                # prefix with 'i' or 'c' depending on the input axis
+                # e.g., you must do ilevel_0 for the 0th level of an unnamed
+                # multiiindex
+                level_string = '{prefix}level_{i}'.format(prefix=axis[0], i=i)
+                key = level_string
+                level = i
+
+            d[key] = Series(axis_index.get_level_values(level).values,
+                            index=axis_index, name=level)
+
+        # put the index/columns itself in the dict
+        d[axis] = axis_index
+        return d
+
     def query(self, expr, **kwargs):
         """Query the columns of a frame with a boolean expression.
 
@@ -1964,7 +1987,15 @@ class DataFrame(NDFrame):
             raise ValueError("Going up fewer than 4 stack frames will not"
                              " capture the necessary variable scope for a "
                              "query expression")
-        return self[self.eval(expr, **kwargs)]
+
+        res = self.eval(expr, **kwargs)
+
+        try:
+            return self.loc[res]
+        except ValueError:
+            # when res is multi-dimensional loc raises, but this is sometimes a
+            # valid query
+            return self[res]
 
     def eval(self, expr, **kwargs):
         """Evaluate an expression in the context of the calling DataFrame
@@ -2003,12 +2034,9 @@ class DataFrame(NDFrame):
         """
         resolvers = kwargs.pop('resolvers', None)
         if resolvers is None:
-            index_resolvers = {}
-            if self.index.name is not None:
-                index_resolvers[self.index.name] = self.index
-            index_resolvers.update({'index': self.index,
-                                    'columns': self.columns})
-            resolvers = [index_resolvers, self]
+            index_resolvers = self._get_index_resolvers('index')
+            index_resolvers.update(self._get_index_resolvers('columns'))
+            resolvers = [self, index_resolvers]
         kwargs['local_dict'] = _ensure_scope(resolvers=resolvers, **kwargs)
         return _eval(expr, **kwargs)
 

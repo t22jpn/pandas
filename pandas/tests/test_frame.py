@@ -11119,6 +11119,108 @@ class TestDataFrameQueryNumExprPandas(unittest.TestCase):
         assert_frame_equal(res, expec)
 
 
+class TestDataFrameQueryWithMultiIndex(object):
+    def check_query_with_named_multiindex(self, parser, engine):
+        skip_if_no_ne(engine)
+        a = np.random.choice(['red', 'green'], size=10)
+        b = np.random.choice(['eggs', 'ham'], size=10)
+        index = MultiIndex.from_arrays([a, b], names=['color', 'food'])
+        df = DataFrame(randn(10, 2), index=index)
+        ind = Series(df.index.get_level_values('color').values, index=index,
+                     name='color')
+
+        # equality
+        #import ipdb; ipdb.set_trace()
+        res1 = df.query('color == "red"', parser=parser, engine=engine)
+        res2 = df.query('"red" == color', parser=parser, engine=engine)
+        exp = df[ind == 'red']
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # inequality
+        res1 = df.query('color != "red"', parser=parser, engine=engine)
+        res2 = df.query('"red" != color', parser=parser, engine=engine)
+        exp = df[ind != 'red']
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # list equality (really just set membership)
+        res1 = df.query('color == ["red"]', parser=parser, engine=engine)
+        res2 = df.query('["red"] == color', parser=parser, engine=engine)
+        exp = df[ind.isin(['red'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        res1 = df.query('color != ["red"]', parser=parser, engine=engine)
+        res2 = df.query('["red"] != color', parser=parser, engine=engine)
+        exp = df[~ind.isin(['red'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # in/not in ops
+        res1 = df.query('["red"] in color', parser=parser, engine=engine)
+        res2 = df.query('"red" in color', parser=parser, engine=engine)
+        exp = df[ind.isin(['red'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        res1 = df.query('["red"] not in color', parser=parser, engine=engine)
+        res2 = df.query('"red" not in color', parser=parser, engine=engine)
+        exp = df[~ind.isin(['red'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+    def test_query_with_named_multiindex(self):
+        for parser, engine in product(['pandas'], ENGINES):
+            yield self.check_query_with_named_multiindex, parser, engine
+
+    def check_query_with_unnamed_multiindex(self, parser, engine):
+        skip_if_no_ne(engine)
+        a = np.random.choice(['red', 'green'], size=10)
+        b = np.random.choice(['eggs', 'ham'], size=10)
+        index = MultiIndex.from_arrays([a, b])
+        df = DataFrame(randn(10, 2), index=index)
+        res = df.query('ilevel_1 == "eggs"', parser=parser, engine=engine)
+        ind = Series(df.index.get_level_values(1).values, index=index,
+                     name=1)
+        exp = df[ind == 'eggs']
+        assert_frame_equal(res, exp)
+
+    def test_query_with_unnamed_multiindex(self):
+        for parser, engine in product(['pandas'], ENGINES):
+            yield self.check_query_with_unnamed_multiindex, parser, engine
+
+    def check_query_with_partially_named_multiindex(self, parser, engine):
+        skip_if_no_ne(engine)
+        a = np.random.choice(['red', 'green'], size=10)
+        b = np.arange(10)
+        index = MultiIndex.from_arrays([a, b])
+        index.names = [None, 'rating']
+        df = DataFrame(randn(10, 2), index=index)
+        res = df.query('rating == 1', parser=parser, engine=engine)
+        ind = Series(df.index.get_level_values('rating').values, index=index,
+                     name='rating')
+        exp = df[ind == 1]
+        assert_frame_equal(res, exp)
+
+        skip_if_no_ne(engine)
+        skip_if_no_pandas_parser(parser)
+        a = np.random.choice(['red', 'green'], size=10)
+        b = np.arange(10)
+        index = MultiIndex.from_arrays([a, b])
+        index.names = [None, 'rating']
+        df = DataFrame(randn(10, 2), index=index)
+        res = df.query('rating == 1', parser=parser, engine=engine)
+        ind = Series(df.index.get_level_values('rating').values, index=index,
+                     name='rating')
+        exp = df[ind == 1]
+        assert_frame_equal(res, exp)
+
+    def test_query_with_partially_named_multiindex(self):
+        for parser, engine in product(['pandas'], ENGINES):
+            yield self.check_query_with_partially_named_multiindex, parser, engine
+
+
 class TestDataFrameQueryNumExprPython(TestDataFrameQueryNumExprPandas):
     @classmethod
     def setUpClass(cls):

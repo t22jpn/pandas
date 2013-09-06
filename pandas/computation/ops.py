@@ -416,7 +416,8 @@ class BinOp(Op):
 
             # base cases
             if is_term(left) and is_term(right):
-                if self.op not in eval_in_python:
+                if (self.op not in eval_in_python and
+                    not isinstance(left.value, string_types)):
                     res = pd.eval(com.pprint_thing(self), local_dict=env)
                 else:
                     res = self.func(left.value, right.value)

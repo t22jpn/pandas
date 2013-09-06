@@ -200,6 +200,18 @@ class Scope(StringMixin):
         self.ntemps += 1
         return name
 
+    def remove_tmp(self, name, where='locals'):
+        d = getattr(self, where, None)
+        if d is None:
+            raise AttributeError("Cannot remove value from non-existent scope "
+                                 "{0!r}".format(where))
+        if not isinstance(d, dict):
+            raise TypeError("Cannot remove value from object of type {0!r}, "
+                            "scope must be a dictionary"
+                            "".format(type(d).__name__))
+        del d[name]
+        self.ntemps -= 1
+
 
 def _rewrite_assign(source):
     res = []
@@ -219,6 +231,14 @@ def _replace_locals(source, local_symbol='@'):
 
 def _preparse(source):
     return _replace_booleans(_rewrite_assign(source))
+
+
+def _is_type(t):
+    return lambda x: isinstance(x.value, t)
+
+
+_is_list = _is_type(list)
+_is_str = _is_type(string_types)
 
 
 # partition all AST nodes
@@ -332,7 +352,13 @@ class BaseExprVisitor(ast.NodeVisitor):
     unary_ops = _unary_ops_syms
     unary_op_nodes = 'UAdd', 'USub', 'Invert', 'Not'
     unary_op_nodes_map = dict(zip(unary_ops, unary_op_nodes))
-    rewrite_map = {ast.Eq: ast.In, ast.NotEq: ast.NotIn}
+
+    rewrite_map = {
+        ast.Eq: ast.In,
+        ast.NotEq: ast.NotIn,
+        ast.In: ast.In,
+        ast.NotIn: ast.NotIn
+    }
 
     def __init__(self, env, engine, parser, preparser=_preparse):
         self.env = env
@@ -363,27 +389,33 @@ class BaseExprVisitor(ast.NodeVisitor):
 
     def _rewrite_membership_op(self, node, left, right):
         # the kind of the operator (is actually an instance)
-        op_class = node.op
-        op_type = type(op_class)
+        op_instance = node.op
+        op_type = type(op_instance)
 
-        # only convert eq/ne to in if we have a list compared with something
-        # else
+        # must be two terms and the comparison operator must be ==/!=/in/not in
         if is_term(left) and is_term(right) and op_type in self.rewrite_map:
-            get_inst = lambda x: isinstance(getattr(x, 'value'),
-                                            (list, string_types))
-            left_list, right_list = map(get_inst, (left, right))
 
-            if left_list or right_list:
-                op_class = self.rewrite_map[op_type]()
+            left_list, right_list = map(_is_list, (left, right))
+            left_str, right_str = map(_is_str, (left, right))
+
+            # if there are any strings or lists in the expression
+            if left_list or right_list or left_str or right_str:
+                op_instance = self.rewrite_map[op_type]()
+
+            # pop the string variable out of locals and replace it with a list
+            # of one string, kind of a hack
+            if right_str:
+                self.env.remove_tmp(right.name)
+                name = self.env.add_tmp([right.value])
+                right = self.term_type(name, self.env)
 
             # swap the operands so things like a == [1, 2] are translated to
             # [1, 2] in a -> a.isin([1, 2])
-            if right_list:
+            if right_list or right_str:
                 left, right = right, left
 
-        # finally visit a possibly new operator node
-        op = self.visit(op_class)
-        return op, op_class, left, right
+        op = self.visit(op_instance)
+        return op, op_instance, left, right
 
     def _possibly_transform_eq_ne(self, node, left=None, right=None):
         if left is None:
