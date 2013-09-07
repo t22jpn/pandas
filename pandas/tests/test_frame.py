@@ -10944,6 +10944,7 @@ starting,ending,measure
         with tm.assertRaises(TypeError):
             df.isin('aaa')
 
+
 def skip_if_no_ne(engine='numexpr'):
     if engine == 'numexpr':
         try:
@@ -11180,11 +11181,87 @@ class TestDataFrameQueryWithMultiIndex(object):
         b = tm.choice(['eggs', 'ham'], size=10)
         index = MultiIndex.from_arrays([a, b])
         df = DataFrame(randn(10, 2), index=index)
-        res = df.query('ilevel_1 == "eggs"', parser=parser, engine=engine)
-        ind = Series(df.index.get_level_values(1).values, index=index,
-                     name=1)
+        ind = Series(df.index.get_level_values(0).values, index=index)
+
+        res1 = df.query('ilevel_0 == "red"', parser=parser, engine=engine)
+        res2 = df.query('"red" == ilevel_0', parser=parser, engine=engine)
+        exp = df[ind == 'red']
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # inequality
+        res1 = df.query('ilevel_0 != "red"', parser=parser, engine=engine)
+        res2 = df.query('"red" != ilevel_0', parser=parser, engine=engine)
+        exp = df[ind != 'red']
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # list equality (really just set membership)
+        res1 = df.query('ilevel_0 == ["red"]', parser=parser, engine=engine)
+        res2 = df.query('["red"] == ilevel_0', parser=parser, engine=engine)
+        exp = df[ind.isin(['red'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        res1 = df.query('ilevel_0 != ["red"]', parser=parser, engine=engine)
+        res2 = df.query('["red"] != ilevel_0', parser=parser, engine=engine)
+        exp = df[~ind.isin(['red'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # in/not in ops
+        res1 = df.query('["red"] in ilevel_0', parser=parser, engine=engine)
+        res2 = df.query('"red" in ilevel_0', parser=parser, engine=engine)
+        exp = df[ind.isin(['red'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        res1 = df.query('["red"] not in ilevel_0', parser=parser, engine=engine)
+        res2 = df.query('"red" not in ilevel_0', parser=parser, engine=engine)
+        exp = df[~ind.isin(['red'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        #### LEVEL 1 ####
+        ind = Series(df.index.get_level_values(1).values, index=index)
+        res1 = df.query('ilevel_1 == "eggs"', parser=parser, engine=engine)
+        res2 = df.query('"eggs" == ilevel_1', parser=parser, engine=engine)
         exp = df[ind == 'eggs']
-        assert_frame_equal(res, exp)
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # inequality
+        res1 = df.query('ilevel_1 != "eggs"', parser=parser, engine=engine)
+        res2 = df.query('"eggs" != ilevel_1', parser=parser, engine=engine)
+        exp = df[ind != 'eggs']
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # list equality (really just set membership)
+        res1 = df.query('ilevel_1 == ["eggs"]', parser=parser, engine=engine)
+        res2 = df.query('["eggs"] == ilevel_1', parser=parser, engine=engine)
+        exp = df[ind.isin(['eggs'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        res1 = df.query('ilevel_1 != ["eggs"]', parser=parser, engine=engine)
+        res2 = df.query('["eggs"] != ilevel_1', parser=parser, engine=engine)
+        exp = df[~ind.isin(['eggs'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        # in/not in ops
+        res1 = df.query('["eggs"] in ilevel_1', parser=parser, engine=engine)
+        res2 = df.query('"eggs" in ilevel_1', parser=parser, engine=engine)
+        exp = df[ind.isin(['eggs'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
+
+        res1 = df.query('["eggs"] not in ilevel_1', parser=parser, engine=engine)
+        res2 = df.query('"eggs" not in ilevel_1', parser=parser, engine=engine)
+        exp = df[~ind.isin(['eggs'])]
+        assert_frame_equal(res1, exp)
+        assert_frame_equal(res2, exp)
 
     def test_query_with_unnamed_multiindex(self):
         for parser, engine in product(['pandas'], ENGINES):
@@ -11203,17 +11280,20 @@ class TestDataFrameQueryWithMultiIndex(object):
         exp = df[ind == 1]
         assert_frame_equal(res, exp)
 
-        skip_if_no_ne(engine)
-        skip_if_no_pandas_parser(parser)
-        a = tm.choice(['red', 'green'], size=10)
-        b = np.arange(10)
-        index = MultiIndex.from_arrays([a, b])
-        index.names = [None, 'rating']
-        df = DataFrame(randn(10, 2), index=index)
-        res = df.query('rating == 1', parser=parser, engine=engine)
+        res = df.query('rating != 1', parser=parser, engine=engine)
         ind = Series(df.index.get_level_values('rating').values, index=index,
                      name='rating')
-        exp = df[ind == 1]
+        exp = df[ind != 1]
+        assert_frame_equal(res, exp)
+
+        res = df.query('ilevel_0 == "red"', parser=parser, engine=engine)
+        ind = Series(df.index.get_level_values(0).values, index=index)
+        exp = df[ind == "red"]
+        assert_frame_equal(res, exp)
+
+        res = df.query('ilevel_0 != "red"', parser=parser, engine=engine)
+        ind = Series(df.index.get_level_values(0).values, index=index)
+        exp = df[ind != "red"]
         assert_frame_equal(res, exp)
 
     def test_query_with_partially_named_multiindex(self):
