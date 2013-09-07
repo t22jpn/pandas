@@ -338,11 +338,12 @@ def add_ops(op_classes):
 @disallow(_unsupported_nodes)
 @add_ops(_op_classes)
 class BaseExprVisitor(ast.NodeVisitor):
+    """Custom ast walker
+    """
+
     const_type = Constant
     term_type = Term
 
-    """Custom ast walker
-    """
     binary_ops = _cmp_ops_syms + _bool_ops_syms + _arith_ops_syms
     binary_op_nodes = ('Gt', 'Lt', 'GtE', 'LtE', 'Eq', 'NotEq', 'In', 'NotIn',
                        'BitAnd', 'BitOr', 'And', 'Or', 'Add', 'Sub', 'Mult',

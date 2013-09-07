@@ -1022,7 +1022,6 @@ class TestOperationsPythonPython(TestOperationsNumExprPython):
                                cls.arith_ops)
 
     def test_fails_ampersand(self):
-        raise nose.SkipTest("known failer for now")
         df = DataFrame(np.random.randn(5, 3))
         self.assertRaises(TypeError, pd.eval,
                           '(df + 2)[df > 1] > 0 & (df > 0)',
@@ -1030,7 +1029,6 @@ class TestOperationsPythonPython(TestOperationsNumExprPython):
                           engine=self.engine)
 
     def test_fails_pipe(self):
-        raise nose.SkipTest("known failer for now")
         df = DataFrame(np.random.randn(5, 3))
         self.assertRaises(TypeError, pd.eval,
                           '(df + 2)[df > 1] > 0 | (df > 0)',

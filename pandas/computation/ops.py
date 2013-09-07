@@ -346,16 +346,10 @@ class BinOp(Op):
             self.func = op.truediv
 
         # recurse over the left nodes
-        try:
-            left = self.lhs(env)
-        except TypeError:
-            left = self.lhs
+        left = self.lhs(env)
 
         # recurse over the right nodes
-        try:
-            right = self.rhs(env)
-        except TypeError:
-            right = self.rhs
+        right = self.rhs(env)
 
         # base cases
         if is_term(left) and is_term(right):
