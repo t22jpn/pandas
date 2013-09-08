@@ -1090,7 +1090,7 @@ having to specify which frame you're interested in querying
    df2 = DataFrame(randint(n + 10, size=(n + 10, 3)), columns=list('abc'))
    df2
    expr = 'a < b & b < c'
-   map(lambda frame: frame.query(expr), [df, df2])
+   list(map(lambda frame: frame.query(expr), [df, df2]))
 
 A chained comparison would also work in this situation, yielding slightly
 cleaner syntax
