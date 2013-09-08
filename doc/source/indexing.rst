@@ -1046,10 +1046,42 @@ If instead you don't want to or cannot name your index, you can use the name
    index = old_index
    del old_index
 
+
+You can also use the levels of a ``DataFrame`` with a
+:class:`~pandas.MultiIndex` as if they were columns in the frame:
+
+.. ipython:: python
+
+   import pandas.util.testing as tm
+
+   a = tm.choice(['red', 'green'], size=10)
+   b = tm.choice(['eggs', 'ham'], size=10)
+   a
+   b
+
+   index = MultiIndex.from_arrays([a, b], names=['color', 'food'])
+   df = DataFrame(randn(10, 2), index=index)
+   df.query('color == "red"')
+
+If the levels of the ``MultiIndex`` are unnamed, you can refer to them using
+special names:
+
+
+.. ipython:: python
+
+   index = MultiIndex.from_arrays([a, b])
+   df = DataFrame(randn(10, 2), index=index)
+   df.query('ilevel_0 == "red"')
+
+
+The convention is ``ilevel_0``, which means "index level 0" for the 0th level
+of the ``index``.
+
+
 A use case for :meth:`~pandas.DataFrame.query` is when you have a collection of
-:class:`~pandas.DataFrame` s that have a subset of column names (or index
-names) in common. You can pass the same query to both frames *without* having
-to specify which frame you're interested in querying
+:class:`~pandas.DataFrame` objects that have a subset of column names (or index
+levels/names) in common. You can pass the same query to both frames *without*
+having to specify which frame you're interested in querying
 
 .. ipython:: python
 
@@ -1193,6 +1225,7 @@ Of course, expressions can be arbitrarily complex too
 
    d = old_d
    del old_d
+
 
 .. _indexing.class:
 
